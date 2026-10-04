@@ -1,8 +1,8 @@
 # Totipo Design Guidelines
 
-**Status:** Draft v0  
+**Status:** Draft v0.2  
 **Scope:** Cross-platform product and interaction design  
-**Normative protocol status:** Non-normative
+**Protocol status:** Non-normative
 
 These guidelines define Totipo's shared product language across desktop and Android, and are intended to remain applicable to future platforms such as iOS.
 
@@ -40,11 +40,13 @@ The product hierarchy is:
    - Delete TOTP.
    - Change vault.
    - Refresh when manual refresh is required.
+   - Change vault password.
 
 4. **Exceptional state handling**
    - Resolve conflicts.
    - Handle invalid/corrupt data.
    - Handle read-only or otherwise constrained vault state.
+   - Handle uncertain publication or newly arrived conflict information.
 
 Exceptional operations may become visually prominent when they are relevant, but they should not dominate the normal interface.
 
@@ -105,6 +107,9 @@ Examples:
 - Edit flow: **Save**
 - Conflict: **Resolve**
 - Vault selection: **Select Folder**
+- Unlock: **Open**
+- New vault: **Create Vault**
+- Password change: **Change Password**
 
 This does not imply one global primary button per screen. The main TOTP list contains multiple independently actionable rows, each of which may have its own primary action.
 
@@ -127,6 +132,8 @@ Examples:
 - Resolve
 - Open
 - Select Folder
+- Create Vault
+- Change Password
 
 ### 4.2 Secondary action
 
@@ -660,7 +667,528 @@ If it does not match the current filter, do not silently clear the user's search
 
 ---
 
-## 8. Shared semantic states
+## 8. Edit and delete TOTP
+
+### 8.1 Edit
+
+Edit is a secondary management operation.
+
+The normal edit screen should focus on user-facing identity:
+
+```text
+Edit TOTP
+
+Service
+[ GitHub                         ]
+
+Account
+[ niki@example.com               ]
+
+Authenticator setup
+SHA1 · 6 digits · 30 seconds
+Change setup…
+
+                         Cancel   Save
+```
+
+The raw secret should not normally appear as an editable field.
+
+Changing authenticator setup is an explicit sub-flow.
+
+### 8.2 Change setup
+
+`Change setup…` reuses the same acquisition/review model as Add TOTP:
+
+- QR scan where supported;
+- setup URI;
+- manual entry.
+
+The user reviews the replacement setup before applying it.
+
+Algorithm, digits, and period remain secondary details unless the user explicitly enters or reviews advanced setup.
+
+### 8.3 Delete
+
+Delete should be a direct destructive management action, not a lifecycle radio button buried in Edit.
+
+Conceptually:
+
+```text
+Delete TOTP?
+
+GitHub
+niki@example.com
+
+This removes the TOTP from the active vault.
+
+Deleting a TOTP does not erase previous versions from vault history.
+
+                    Cancel   Delete TOTP
+```
+
+One clear confirmation is sufficient.
+
+Deleted entries disappear from the normal active TOTP list.
+
+The UI must not promise secure erasure.
+
+---
+
+## 9. Conflict presentation and resolution
+
+Conflict is exceptional but should be presented in user terms, not protocol internals.
+
+### 9.1 Alternatives are user-facing versions
+
+A conflict may have multiple causal Heads, and multiple Heads may converge on the same semantic value.
+
+The normal UI presents distinct **Alternatives** as user-facing **versions**.
+
+Heads are provenance behind those versions, not separate choices merely because they are separate lineages.
+
+Conceptually:
+
+```text
+Conflict
+    Version A
+        one or more Heads
+    Version B
+        one or more Heads
+```
+
+The number of Heads supporting a version is not a vote and must not imply preference.
+
+### 9.2 Conflict panel
+
+A conflict panel may look like:
+
+```text
+Conflict                                      Resolve…
+
+Two versions of this TOTP need your attention.
+
+GitHub
+personal@example.com                         Show Code
+
+GitHub
+work@example.com                             Show Code
+```
+
+Three-way and larger conflicts use the same model: more versions, not a different interaction.
+
+Versions may support the ordinary bounded `Show Code → Copy` interaction when safe and meaningful.
+
+### 9.3 Simple resolution first
+
+The resolver should first offer complete versions:
+
+```text
+Resolve TOTP conflict
+
+Which version should Totipo keep?
+
+○ GitHub
+  personal@example.com
+  SHA1 · 6 digits · 30 seconds
+
+○ GitHub
+  work@example.com
+  SHA1 · 6 digits · 30 seconds
+
+○ Combine details…
+```
+
+No version is silently preferred.
+
+### 9.4 Versions that differ only in secret material
+
+Distinct Alternatives may have identical visible issuer/account/algorithm/digits/period but different authenticator secrets.
+
+The UI must keep such Alternatives distinguishable without exposing existing secret bytes.
+
+It may say, for example:
+
+```text
+GitHub
+niki@example.com
+SHA1 · 6 digits · 30 seconds
+Authenticator key: Version 1
+```
+
+and:
+
+```text
+GitHub
+niki@example.com
+SHA1 · 6 digits · 30 seconds
+Authenticator key: Version 2
+```
+
+`Show Code` may help the user identify which credential is currently valid.
+
+### 9.5 Heads as provenance
+
+Head-level information belongs behind an optional Details affordance.
+
+Useful provenance may include safe client/writer metadata where available.
+
+The UI must not label a version as "newest", "most likely", or "recommended" merely because of Head count or client-reported time.
+
+### 9.6 Combine details
+
+`Combine details…` presents only fields that actually differ.
+
+Agreed fields need no decision.
+
+For example:
+
+```text
+Service
+GitHub
+
+Account
+○ personal@example.com
+○ work@example.com
+○ Other…
+
+Authenticator setup
+○ Setup from Version 1
+○ Setup from Version 2
+Advanced…
+```
+
+The detailed merge UI may expose independently resolvable fields where the protocol/API permits this.
+
+Distinct equal values should be shown once, not once per Head.
+
+### 9.7 Deleted alternatives
+
+A deleted Alternative should be expressed in user terms, for example:
+
+```text
+○ Keep GitHub / niki@example.com
+○ Keep this TOTP deleted
+```
+
+Do not expose protocol terms such as `TOMBSTONE` in normal UI.
+
+### 9.8 Newly arrived conflict information
+
+If new relevant conflict information arrives while the user is resolving:
+
+- do not silently publish a now-partial resolution;
+- do not flatten the event into a generic save failure.
+
+Present an explicit state such as:
+
+```text
+Another version appeared while you were resolving this conflict.
+
+Review the updated conflict before continuing.
+
+Review Updated Conflict
+```
+
+Any advanced partial-resolution path must be explicit.
+
+### 9.9 Publication uncertainty
+
+If Totipo cannot affirm whether a conflict resolution was persisted, do not say simply `Save failed`.
+
+Use wording that communicates uncertainty, for example:
+
+```text
+Totipo couldn't confirm whether the resolution was saved.
+
+Refresh or reopen the vault before deciding what to do next.
+```
+
+The UI must not automatically retry in a way that obscures the uncertain outcome.
+
+---
+
+## 10. Vault selection
+
+The task is to choose the folder or platform storage location containing a Totipo vault.
+
+The selector should optimize for navigation and selection, not behave like a miniature file manager.
+
+### 10.1 Desktop
+
+Conceptually:
+
+```text
+Select Vault Folder
+
+/home/niki/Sources
+────────────────────────────────────
+
+../
+projects/
+totipo-vault/
+
+Selected folder
+/home/niki/Sources/totipo-vault
+
+                         Cancel   Select Folder
+```
+
+Directories are the primary selectable objects.
+
+The Totipo vault selector should not prominently expose unrelated destructive filesystem operations such as Delete or Rename.
+
+`New Folder` may be available where platform-appropriate, but should remain a utility action.
+
+A generic file filter is not required for v0.
+
+### 10.2 Native chooser policy
+
+Prefer the platform's normal directory-selection experience when it is sufficiently usable.
+
+A custom picker is acceptable where the platform/toolkit chooser provides a materially worse experience.
+
+The shared contract is semantic, not widget-specific.
+
+### 10.3 Selection and validation
+
+Folder selection and vault validation are separate:
+
+```text
+Select folder
+    ↓
+Validate
+    ├── valid vault → Unlock
+    └── not a vault → Explain
+```
+
+Selecting a directory must never implicitly initialize protocol state.
+
+### 10.4 Open and create are separate intents
+
+Opening an existing vault and creating a new vault are separate flows.
+
+An empty folder selected during `Open Existing Vault` must not silently become a new vault.
+
+---
+
+## 11. Startup and remembered vault
+
+Totipo should remember the last successfully opened vault location.
+
+Normal startup:
+
+```text
+Launch Totipo
+   ↓
+remembered vault?
+   ├── yes → unlock that vault
+   └── no  → Open Existing / Create New
+```
+
+Rules:
+
+- remember the vault location, not the password;
+- only replace the remembered location after successful vault validation/open;
+- a failed attempt to open another folder must not overwrite the last known-good location;
+- if the remembered location is unavailable, fall back gracefully to the initial Open/Create flow;
+- after a successful Change Vault operation, the new location becomes the remembered location;
+- platforms that require durable access grants/bookmarks should persist the platform-appropriate access reference rather than assuming a raw path is enough.
+
+The remembered location is local application metadata and should not become synchronized vault content.
+
+---
+
+## 12. Open / unlock vault
+
+### 12.1 Initial state
+
+If there is no remembered vault:
+
+```text
+Totipo
+
+Open an existing vault or create a new one.
+
+Open Existing Vault…
+Create New Vault…
+```
+
+These are peer entry points.
+
+### 12.2 Unlock
+
+Once a vault is selected:
+
+```text
+Open Vault
+
+totipo-vault
+/home/niki/Sources/totipo-vault
+
+Password
+[                              ]
+
+                    Change Vault…   Open
+```
+
+Vault name is primary identity; full path is secondary context.
+
+`Open` is primary.
+
+`Change Vault…` is secondary.
+
+`Exit` should not be a task action when normal window/application close behavior already exists.
+
+### 12.3 Password behavior
+
+The password field should:
+
+- receive initial focus;
+- obscure input by default;
+- support platform-standard password behavior;
+- never leak the password into logs or error text;
+- submit with Enter when unambiguous.
+
+A platform-standard show-password affordance is acceptable.
+
+### 12.4 Empty password
+
+Opening with an empty password requires explicit confirmation.
+
+The confirming action should clearly describe the exceptional choice, e.g. `Open Anyway`.
+
+### 12.5 Failed unlock vs invalid vault
+
+Wrong/unusable credentials and invalid/corrupt vault state must not collapse into one message.
+
+If Totipo can establish that the vault itself cannot safely be interpreted, do not encourage repeated password retries.
+
+### 12.6 Successful unlock
+
+On success, enter the main vault view with all TOTP codes concealed.
+
+---
+
+## 13. Create new vault
+
+Creation is separate from opening an existing vault.
+
+Conceptually:
+
+```text
+Create New Vault
+      ↓
+Choose/create empty vault location
+      ↓
+Set vault password
+      ↓
+Create
+      ↓
+Empty main vault view
+```
+
+### 13.1 Location
+
+For v0, create a vault in:
+
+- a newly created directory; or
+- an existing empty directory.
+
+Do not overwrite an existing Totipo vault or unrelated files.
+
+If an existing Totipo vault is found, direct the user toward Open Existing Vault.
+
+### 13.2 Password
+
+Collect:
+
+- new password;
+- confirmation.
+
+Do not impose arbitrary password composition rules.
+
+Platform-standard reveal-password behavior is acceptable.
+
+### 13.3 Empty password
+
+An empty password is allowed only through explicit confirmation.
+
+The confirming action should say something like `Create Without Password`, not merely `Create`.
+
+### 13.4 Do not expose protocol machinery
+
+Normal vault creation should not ask the user about:
+
+- cryptographic algorithms;
+- KDF parameters;
+- root/vault keys;
+- protocol revision;
+- writer/device IDs;
+- object padding;
+- synchronization internals.
+
+Use supported implementation defaults.
+
+### 13.5 Success
+
+Only enter the main vault view after creation is affirmed.
+
+A newly created vault should land on the empty state:
+
+```text
+No TOTPs yet.
+
+Add your first TOTP to this vault.
+
+Add TOTP
+```
+
+No additional success dialog is required.
+
+---
+
+## 14. Change vault password
+
+Changing the vault password does **not** re-encrypt vault contents and does **not** rotate the vault encryption key.
+
+The UI must not imply otherwise.
+
+### 14.1 Core explanation
+
+The screen should include user-facing explanatory text such as:
+
+> Changing the password does not re-encrypt your TOTP data. Totipo keeps the vault's encryption key and changes how that key is protected by your password.
+
+A shorter form may be used inline:
+
+> Your new password will protect access to the existing vault encryption key. The contents of the vault are not re-encrypted.
+
+### 14.2 Historical copies
+
+Where relevant, also disclose that old retained copies may remain usable with the old password:
+
+> Previous copies may still exist in backups, synchronization history, or other retained storage and may still be accessible using the old password.
+
+Do not promise revocation or erasure of historical copies.
+
+### 14.3 Interaction
+
+Collect:
+
+- new password;
+- confirmation.
+
+Do not impose arbitrary password composition rules.
+
+Empty new password requires explicit confirmation.
+
+The action should be called **Change Vault Password**, not `Re-encrypt Vault`, `Rotate Encryption`, or similar terminology.
+
+Password change should not present fake progress implying that every TOTP object is being rewritten.
+
+---
+
+## 15. Shared semantic states
 
 Totipo applications should share a small vocabulary of semantic states.
 
@@ -676,6 +1204,7 @@ Totipo applications should share a small vocabulary of semantic states.
 | Read-only | Content is visible but modification is unavailable |
 | Deleted | Logical deletion/tombstone state |
 | Disabled | Action is currently unavailable |
+| Publication uncertain | Totipo cannot affirm whether a change persisted |
 
 A reusable `StatusPanel` should represent substantial exceptional state.
 
@@ -685,7 +1214,7 @@ Neither should rely on color or iconography alone.
 
 ---
 
-## 9. Choice controls
+## 16. Choice controls
 
 Finite exclusive choices are not ordinary command buttons.
 
@@ -705,7 +1234,7 @@ Requirements:
 
 ---
 
-## 10. Forms and sections
+## 17. Forms and sections
 
 Forms should use a consistent semantic structure:
 
@@ -733,7 +1262,7 @@ The exact Swing fieldset appearance is not normative.
 
 ---
 
-## 11. Dialog actions
+## 18. Dialog actions
 
 Task dialogs should use a consistent action area.
 
@@ -751,7 +1280,7 @@ Enter may invoke the primary action only where safe and unambiguous.
 
 ---
 
-## 12. Accessibility
+## 19. Accessibility
 
 At minimum:
 
@@ -769,7 +1298,7 @@ Accessibility is part of the component contract, not a later polish pass.
 
 ---
 
-## 13. Visual tokens
+## 20. Visual tokens
 
 Totipo should use semantic tokens rather than hard-coded ad hoc styling.
 
@@ -822,7 +1351,7 @@ Light and dark environments should both be supported.
 
 ---
 
-## 14. Icons
+## 21. Icons
 
 Icons reinforce text rather than replace important concepts.
 
@@ -832,7 +1361,7 @@ Do not use danger/error imagery for neutral actions such as Cancel.
 
 ---
 
-## 15. Platform relationship
+## 22. Platform relationship
 
 The design hierarchy is:
 
@@ -861,7 +1390,7 @@ Likewise, Swing's current look-and-feel is not normative.
 
 ---
 
-## 16. Initial component catalogue
+## 23. Initial component catalogue
 
 The initial shared component vocabulary is:
 
@@ -887,30 +1416,30 @@ Status
 
 Domain
     TokenRow
-    TokenCandidate
+    TokenAlternativeView
     ConflictPanel
     AddTOTPFlow
+    VaultSelector
+    VaultUnlock
 ```
 
 Components should be added only when real screens demonstrate a recurring need.
 
 ---
 
-## 17. Not yet specified
+## 24. Not yet fully specified
 
-The following areas remain to be worked through before the guidelines should be considered complete:
+The following areas still need a dedicated pass before these guidelines should be considered complete:
 
-- Edit TOTP workflow
-- Delete TOTP workflow and history disclosure
-- Conflict resolution UI
-- Vault selection
-- Open/unlock vault
-- Change vault password
-- Read-only and invalid/corrupt vault presentation
-- application-level lock/background behavior
-- clipboard lifetime and feedback details beyond TokenRow Copy
-- detailed Android navigation structure
-- detailed desktop menu structure
-- visual token values after implementation testing
+- detailed clipboard clearing/lifetime policy beyond TokenRow copy feedback;
+- read-only vault presentation;
+- invalid/corrupt vault recovery actions;
+- application-level lock/background behavior;
+- detailed Android navigation structure;
+- detailed desktop menu structure;
+- detailed accessibility announcements for countdown rollover and copy feedback;
+- visual token values after implementation testing;
+- history/deleted-item inspection, if exposed at all;
+- device admission/management UX, if exposed to end users.
 
 These should be designed from concrete application behavior rather than invented in isolation.
