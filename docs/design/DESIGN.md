@@ -1,6 +1,6 @@
 # Totipo Design Guidelines
 
-**Status:** Draft v0.2  
+**Status:** Draft v0.3  
 **Scope:** Cross-platform product and interaction design  
 **Protocol status:** Non-normative
 
@@ -18,7 +18,7 @@ Totipo is primarily a TOTP retrieval tool backed by a synchronized vault.
 
 The normal user journey is:
 
-1. Open a vault.
+1. Open or unlock the remembered vault.
 2. Find the required TOTP.
 3. Reveal its current code.
 4. Copy or use the code.
@@ -998,7 +998,35 @@ The remembered location is local application metadata and should not become sync
 
 ---
 
-## 12. Open / unlock vault
+## 12. Application shell and vault unlock
+
+Totipo should treat startup, unlock, normal use, and vault-level failure as states of one application shell rather than as unrelated modal workflows.
+
+Conceptually:
+
+```text
+Application shell
+   │
+   ├── NO_VAULT
+   │     Open Existing Vault…
+   │     Create New Vault…
+   │
+   ├── LOCKED
+   │     remembered vault identity
+   │     password unlock
+   │     biometric unlock, when enabled and available
+   │     Change Vault…
+   │
+   ├── UNLOCKED
+   │     Search
+   │     Add TOTP
+   │     TokenRows
+   │
+   └── VAULT_ERROR
+         explanatory/recovery state
+```
+
+Desktop should normally present these states in the main application window instead of opening a separate password dialog over an otherwise empty shell. Android may use the equivalent platform-native screen structure.
 
 ### 12.1 Initial state
 
@@ -1015,12 +1043,12 @@ Create New Vault…
 
 These are peer entry points.
 
-### 12.2 Unlock
+### 12.2 Locked state
 
-Once a vault is selected:
+Once a vault is known but locked:
 
 ```text
-Open Vault
+Totipo
 
 totipo-vault
 /home/niki/Sources/totipo-vault
@@ -1028,22 +1056,22 @@ totipo-vault
 Password
 [                              ]
 
-                    Change Vault…   Open
+                    Change Vault…   Unlock
 ```
 
 Vault name is primary identity; full path is secondary context.
 
-`Open` is primary.
+`Unlock` is primary.
 
 `Change Vault…` is secondary.
 
-`Exit` should not be a task action when normal window/application close behavior already exists.
+`Exit` should not be a task action when normal application/window close behavior already exists.
 
 ### 12.3 Password behavior
 
 The password field should:
 
-- receive initial focus;
+- receive initial focus when password unlock is the active path;
 - obscure input by default;
 - support platform-standard password behavior;
 - never leak the password into logs or error text;
@@ -1065,7 +1093,9 @@ If Totipo can establish that the vault itself cannot safely be interpreted, do n
 
 ### 12.6 Successful unlock
 
-On success, enter the main vault view with all TOTP codes concealed.
+On success, transition the same application shell to the main vault view with all TOTP codes concealed.
+
+Unlocking must not automatically reveal any TOTP.
 
 ---
 
@@ -1188,7 +1218,324 @@ Password change should not present fake progress implying that every TOTP object
 
 ---
 
-## 15. Shared semantic states
+## 15. Clipboard policy
+
+Copying a TOTP is part of the primary product workflow, but clipboard exposure should be bounded.
+
+### 15.1 Copied value
+
+Copy the canonical credential digits, not their visual grouping.
+
+For example, a visually rendered `213 933` is copied as `213933`.
+
+### 15.2 Clipboard lifetime
+
+A copied TOTP remains eligible for clipboard use only through the validity period of that exact code.
+
+> Totipo should make a best-effort attempt to clear a copied TOTP when that copied code reaches its rollover boundary.
+
+If the row is in late-reveal grace and rolls to a new code, Totipo must not silently replace the clipboard with the new code.
+
+Copying does not extend TokenRow reveal lifetime.
+
+### 15.3 Do not destroy newer clipboard contents
+
+Clipboard cleanup must never blindly overwrite content that the user copied after the TOTP.
+
+Where the platform provides ownership, change tokens, provenance, or another safe mechanism, use it to determine whether the clipboard still contains the value Totipo placed there.
+
+If Totipo cannot safely establish that the clipboard still contains its copied value, leave the clipboard unchanged.
+
+### 15.4 Sensitive clipboard handling
+
+Where a platform provides a supported way to mark clipboard data as sensitive or suppress clipboard previews, Totipo should use it.
+
+Clipboard values must not be copied into logs, notifications, diagnostics, or other incidental persistent surfaces.
+
+Clipboard cleanup is a best-effort privacy measure, not a secure-erasure guarantee.
+
+---
+
+## 16. Locking, background behavior, and biometric unlock
+
+Concealment and locking are separate concepts.
+
+- **Conceal** hides currently displayed TOTP values.
+- **Lock** discards the active unlocked-vault session and requires authentication before vault contents can be accessed again.
+
+### 16.1 Background transition
+
+When Totipo leaves the foreground, all displayed TOTP values should be concealed immediately.
+
+Backgrounding does not by itself need to clear a copied TOTP; clipboard lifetime follows the specific copied code as described in §15.
+
+The vault may remain unlocked for a bounded grace period:
+
+```text
+FOREGROUND + UNLOCKED
+        │
+     background
+        ▼
+BACKGROUND + UNLOCKED
+all codes concealed
+lock timer running
+        │
+        ├── return before timeout
+        │       ↓
+        │   UNLOCKED
+        │   codes remain concealed
+        │
+        └── timeout
+                ↓
+             LOCKED
+```
+
+Returning before the lock timeout must not automatically restore previously revealed codes.
+
+The exact default lock timeout is a product policy value to choose and validate before release. It should not be inferred from the TOTP period.
+
+### 16.2 Android resume behavior
+
+After the vault has locked, returning to Totipo requires authentication.
+
+If biometric unlock is enabled and available, Totipo may invoke the platform biometric prompt. Canceling that prompt leaves Totipo locked and must not create a repeated prompt loop. Password unlock remains available.
+
+If the user returns before the lock timeout, do not prompt for authentication; return to the unlocked main view with all TokenRows concealed.
+
+### 16.3 Biometric unlock
+
+Biometric unlock is a local device convenience. It is not a vault password and is not part of the Totipo synchronization protocol.
+
+Use platform biometric terminology and APIs rather than assuming a particular modality such as fingerprint or face recognition.
+
+Biometric unlock should only be enabled after a successful vault-password unlock.
+
+Local biometric unlock material must be protected using the platform's supported secure authentication/keystore facilities. Totipo must not persist the plaintext vault password merely to replay it after biometric authentication.
+
+Password unlock must remain available as a fallback.
+
+Enabling biometric unlock on one device must not modify synchronized vault state or enable biometric unlock on any other device.
+
+### 16.4 Password-wrapper changes and local biometric unlock
+
+When Totipo observes that the vault's password protection has changed, previously established local biometric unlock material should be treated as stale and must not silently bypass the new password state.
+
+Require a successful unlock using the current vault password before re-establishing local biometric unlock.
+
+This preserves the distinction between a synchronized vault password and device-local convenience authentication.
+
+### 16.5 Desktop locking
+
+Desktop should support explicit Lock.
+
+The application should also lock in response to an operating-system session lock and after the selected Totipo inactivity policy expires.
+
+Minimizing or hiding the desktop window should at least conceal displayed TOTP values. It need not immediately lock the vault unless the product lock policy requires it.
+
+### 16.6 App-switcher and background privacy
+
+On platforms that provide a supported mechanism, Totipo should prevent sensitive unlocked content from appearing in system task/app-switcher previews.
+
+Notifications must not contain TOTP values unless a future feature explicitly designs and reviews such behavior.
+
+---
+
+## 17. Read-only, unavailable, and invalid vault states
+
+Vault-level failure modes should preserve distinctions the implementation can establish. Do not flatten every problem into `Error opening vault`.
+
+### 17.1 Read-only vault
+
+Read-only is a persistent vault-level state, not a reason to block ordinary TOTP retrieval.
+
+When Totipo can safely read the vault but cannot modify it, the user may still:
+
+- search;
+- reveal TOTP codes;
+- copy TOTP codes;
+- view conflict/version details.
+
+Mutation actions are unavailable, including:
+
+- Add TOTP;
+- Edit;
+- Delete;
+- Change Setup;
+- Resolve conflict;
+- Change Vault Password;
+- other operations that require publication.
+
+Present a persistent explanatory state, for example:
+
+```text
+Read-only
+
+You can view and copy TOTP codes, but changes cannot be saved to this vault.
+```
+
+Important unavailable actions may remain disabled-but-discoverable when that improves understanding, with an accessible explanation of why they are unavailable.
+
+A generic failed write must not automatically be relabeled `read-only`; transient I/O failure and publication uncertainty are different states.
+
+### 17.2 Preserve known distinctions
+
+Examples of distinct user-facing conditions include:
+
+- no Totipo vault at the selected location;
+- unsupported vault/protocol version;
+- failed unlock;
+- required data unavailable;
+- invalid/integrity-failing vault data;
+- publication uncertainty.
+
+Use the most specific truthful condition available from the API.
+
+### 17.3 Blocking vault-level integrity failure
+
+If Totipo cannot safely establish a usable vault state, do not show a normal-looking token list.
+
+A blocking state may look like:
+
+```text
+Totipo can't safely open this vault
+
+Some required vault data is missing or invalid.
+
+Try Again    Choose Another Vault
+Details…
+```
+
+Diagnostic details must not expose secrets, passwords, or decrypted credential material.
+
+### 17.4 Localized failures
+
+If the API can safely establish the rest of the vault while identifying a localized unavailable or invalid item, keep the failure local rather than blocking the entire vault.
+
+### 17.5 Recovery actions
+
+Do not offer a generic destructive `Repair Vault` action.
+
+Recovery actions must correspond to explicit, protocol/application-supported operations whose consequences Totipo can state truthfully.
+
+---
+
+## 18. Desktop navigation
+
+Desktop should remain a compact utility application centered on one main vault view. A sidebar or multi-destination shell is not required for v0.
+
+A simple menu structure is sufficient, approximately:
+
+```text
+File
+    Open / Change Vault…
+    Exit
+
+Vault
+    Lock
+    Refresh
+    Change Vault Password…
+    Vault Information…        optional/later
+
+Token
+    Add TOTP…
+```
+
+Edit/Delete should primarily remain contextual to the affected TokenRow rather than occupy permanent global UI.
+
+Useful shortcuts may include:
+
+```text
+Ctrl/Cmd+F       Search
+Ctrl/Cmd+N       Add TOTP
+Ctrl/Cmd+R       Refresh, if manual refresh remains meaningful
+```
+
+Do not add a global reveal shortcut whose target is ambiguous. Secret disclosure should happen in an explicit token context.
+
+The main desktop view remains approximately:
+
+```text
+totipo-vault
+
+Search                                      Add TOTP
+
+TokenRow
+TokenRow
+ConflictPanel
+TokenRow
+```
+
+---
+
+## 19. Android navigation
+
+Android should also center on one primary destination: the current vault's TOTP list. Bottom navigation is not required for v0.
+
+A typical unlocked structure may be:
+
+```text
+┌────────────────────────────────────┐
+│ totipo-vault        Search      ⋮  │
+├────────────────────────────────────┤
+│                                    │
+│ GitHub                  Show Code  │
+│ niki@example.com                   │
+│                                    │
+│ AWS                     Show Code  │
+│ work@example.com                   │
+│                                    │
+│                              [+]   │
+└────────────────────────────────────┘
+```
+
+The persistent Add action means `Add TOTP`.
+
+Infrequent vault operations belong in the app-bar overflow or an equivalent platform-native surface, for example:
+
+- Lock;
+- Refresh;
+- Change Vault;
+- Change Vault Password.
+
+### 19.1 Search
+
+Search may use the standard Android pattern of temporarily replacing the app bar with a search field rather than permanently consuming vertical space.
+
+### 19.2 TokenRow touch interaction
+
+The main body of a TokenRow may act as a generous Show Code target on Android. Management remains behind an overflow/context affordance.
+
+### 19.3 Add TOTP
+
+The persistent Add action opens the Add TOTP flow. QR scanning should be prominent on Android, with manual setup always available.
+
+Scanning returns to a review step and must not commit immediately.
+
+### 19.4 Conflict resolution
+
+A conflict may remain inline in the main list, while `Resolve` navigates to a full-screen resolver.
+
+Leaving the resolver without publication leaves the conflict unresolved.
+
+### 19.5 System Back
+
+Use normal Android navigation semantics:
+
+- active search → leave/clear search;
+- sub-flow → return to the previous screen;
+- main vault view → normal Android app/background behavior.
+
+Do not add an `Are you sure you want to exit?` prompt to normal Back behavior.
+
+### 19.6 Settings
+
+A top-level Settings destination is not required for v0 unless genuine user preferences emerge.
+
+Security/interaction policies such as TokenRow reveal lifetime and clipboard lifetime should not become preferences merely because they are configurable in code.
+
+---
+
+## 20. Shared semantic states
 
 Totipo applications should share a small vocabulary of semantic states.
 
@@ -1205,6 +1552,7 @@ Totipo applications should share a small vocabulary of semantic states.
 | Deleted | Logical deletion/tombstone state |
 | Disabled | Action is currently unavailable |
 | Publication uncertain | Totipo cannot affirm whether a change persisted |
+| Locked | Vault location is known, but authentication is required |
 
 A reusable `StatusPanel` should represent substantial exceptional state.
 
@@ -1214,7 +1562,7 @@ Neither should rely on color or iconography alone.
 
 ---
 
-## 16. Choice controls
+## 21. Choice controls
 
 Finite exclusive choices are not ordinary command buttons.
 
@@ -1234,7 +1582,7 @@ Requirements:
 
 ---
 
-## 17. Forms and sections
+## 22. Forms and sections
 
 Forms should use a consistent semantic structure:
 
@@ -1262,7 +1610,7 @@ The exact Swing fieldset appearance is not normative.
 
 ---
 
-## 18. Dialog actions
+## 23. Dialog actions
 
 Task dialogs should use a consistent action area.
 
@@ -1280,7 +1628,7 @@ Enter may invoke the primary action only where safe and unambiguous.
 
 ---
 
-## 19. Accessibility
+## 24. Accessibility
 
 At minimum:
 
@@ -1298,7 +1646,7 @@ Accessibility is part of the component contract, not a later polish pass.
 
 ---
 
-## 20. Visual tokens
+## 25. Visual tokens
 
 Totipo should use semantic tokens rather than hard-coded ad hoc styling.
 
@@ -1351,7 +1699,7 @@ Light and dark environments should both be supported.
 
 ---
 
-## 21. Icons
+## 26. Icons
 
 Icons reinforce text rather than replace important concepts.
 
@@ -1361,7 +1709,7 @@ Do not use danger/error imagery for neutral actions such as Cancel.
 
 ---
 
-## 22. Platform relationship
+## 27. Platform relationship
 
 The design hierarchy is:
 
@@ -1390,7 +1738,7 @@ Likewise, Swing's current look-and-feel is not normative.
 
 ---
 
-## 23. Initial component catalogue
+## 28. Initial component catalogue
 
 The initial shared component vocabulary is:
 
@@ -1421,25 +1769,24 @@ Domain
     AddTOTPFlow
     VaultSelector
     VaultUnlock
+    LockedVaultView
+    ReadOnlyNotice
 ```
 
 Components should be added only when real screens demonstrate a recurring need.
 
 ---
 
-## 24. Not yet fully specified
+## 29. Not yet fully specified
 
 The following areas still need a dedicated pass before these guidelines should be considered complete:
 
-- detailed clipboard clearing/lifetime policy beyond TokenRow copy feedback;
-- read-only vault presentation;
-- invalid/corrupt vault recovery actions;
-- application-level lock/background behavior;
-- detailed Android navigation structure;
-- detailed desktop menu structure;
-- detailed accessibility announcements for countdown rollover and copy feedback;
+- the exact default inactivity/background lock timeout and whether any platforms need different defaults;
+- detailed accessibility announcements for countdown rollover, copy feedback, lock transitions, and conflict updates;
 - visual token values after implementation testing;
 - history/deleted-item inspection, if exposed at all;
-- device admission/management UX, if exposed to end users.
+- device admission/management UX, if exposed to end users;
+- exact platform-specific secure-storage implementation for local biometric unlock;
+- any explicit recovery workflows supported by future Java/API capabilities beyond the states defined here.
 
-These should be designed from concrete application behavior rather than invented in isolation.
+These should be designed from concrete application behavior and API guarantees rather than invented in isolation.
