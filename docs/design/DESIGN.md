@@ -1,6 +1,6 @@
 # Totipo Design Guidelines
 
-**Status:** Draft v0.3  
+**Status:** Draft v0.4 — v0 implementation baseline  
 **Scope:** Cross-platform product and interaction design  
 **Protocol status:** Non-normative
 
@@ -1256,87 +1256,131 @@ Clipboard cleanup is a best-effort privacy measure, not a secure-erasure guarant
 
 ---
 
-## 16. Locking, background behavior, and biometric unlock
+## 16. Locking, inactivity, background behavior, and biometric unlock
 
-Concealment and locking are separate concepts.
+Concealment, locking, and application visibility are separate concepts.
 
-- **Conceal** hides currently displayed TOTP values.
+- **Conceal** hides a currently displayed TOTP value.
 - **Lock** discards the active unlocked-vault session and requires authentication before vault contents can be accessed again.
+- **Background/minimized** describes application visibility and does not by itself change TokenRow reveal state.
 
-### 16.1 Background transition
+TokenRow disclosure remains governed by the bounded reveal rules in §5. Moving Totipo into the background, behind another window, or into a minimized state must not invent a second concealment timer.
 
-When Totipo leaves the foreground, all displayed TOTP values should be concealed immediately.
+### 16.1 Platform policy summary
 
-Backgrounding does not by itself need to clear a copied TOTP; clipboard lifetime follows the specific copied code as described in §15.
+For v0, use these fixed policies:
 
-The vault may remain unlocked for a bounded grace period:
+| Behavior | Desktop | Android |
+| --- | --- | --- |
+| TOTP reveal | Bounded by TokenRow rollover rules | Same |
+| Focus/background/minimize | No forced concealment or lock | No forced concealment or immediate lock |
+| Auto-lock | 15 minutes of Totipo inactivity | 5 minutes of Totipo inactivity |
+| OS/device lock | Lock Totipo | Lock Totipo |
+| Suspend/sleep | Lock on resume | Follow platform lifecycle; require unlock when the app/session has locked |
+| Local biometric unlock | Optional/future | Supported where platform facilities are suitable |
+| Task/app-switcher preview | Platform-appropriate privacy | Protect sensitive preview |
+| User-configurable security timing | None in v0 | None in v0 |
 
-```text
-FOREGROUND + UNLOCKED
-        │
-     background
-        ▼
-BACKGROUND + UNLOCKED
-all codes concealed
-lock timer running
-        │
-        ├── return before timeout
-        │       ↓
-        │   UNLOCKED
-        │   codes remain concealed
-        │
-        └── timeout
-                ↓
-             LOCKED
-```
+The desktop and Android timeout values are product policy, not vault metadata and not synchronized settings.
 
-Returning before the lock timeout must not automatically restore previously revealed codes.
+### 16.2 What counts as activity
 
-The exact default lock timeout is a product policy value to choose and validate before release. It should not be inferred from the TOTP period.
+Auto-lock timers are reset only by meaningful direct user interaction with Totipo.
 
-### 16.2 Android resume behavior
+Examples include:
 
-After the vault has locked, returning to Totipo requires authentication.
+- searching;
+- revealing or copying a TOTP;
+- opening or using a menu;
+- navigating a Totipo flow;
+- editing, adding, resolving, or otherwise interacting with vault UI.
 
-If biometric unlock is enabled and available, Totipo may invoke the platform biometric prompt. Canceling that prompt leaves Totipo locked and must not create a repeated prompt loop. Password unlock remains available.
+The following do **not** reset the inactivity timer:
 
-If the user returns before the lock timeout, do not prompt for authentication; return to the unlocked main view with all TokenRows concealed.
+- countdown repaint/ticks;
+- filesystem observation;
+- synchronization;
+- background refresh;
+- automatic UI updates;
+- other non-user work.
 
-### 16.3 Biometric unlock
+Use Totipo-local interaction rather than attempting to infer system-wide keyboard or pointer activity.
+
+### 16.3 Desktop locking
+
+Desktop v0 locks after **15 minutes without user interaction with Totipo**.
+
+Desktop also locks:
+
+- on explicit `Lock`;
+- when the operating-system session locks;
+- after suspend/sleep, on resume;
+- when the application exits and its unlocked state is discarded.
+
+The following do not by themselves lock or conceal TokenRows:
+
+- ordinary focus loss;
+- another window covering Totipo;
+- minimizing or hiding the Totipo window.
+
+Any revealed TOTP continues its normal bounded disclosure lifetime and self-conceals according to §5.
+
+Locking means Totipo should discard the active unlocked vault state and release/clear sensitive key material as far as the implementation can reasonably do so. A subsequent unlock requires the vault password or an approved local-device unlock mechanism.
+
+### 16.4 Android locking
+
+Android v0 locks after **5 minutes without user interaction with Totipo**, whether the application remains foregrounded or has moved into the background.
+
+Moving to the background does not itself immediately lock the vault and does not alter TokenRow reveal state. Revealed codes continue their normal bounded lifetime.
+
+If the user returns before the 5-minute timeout and the device/session has not otherwise locked, Totipo returns directly to the unlocked application state without an authentication prompt.
+
+If the timeout has elapsed, or the device/session has locked, Totipo returns in the `LOCKED` state and requires authentication.
+
+The device locking should lock Totipo immediately.
+
+Background work, synchronization, countdown updates, and lifecycle callbacks do not count as user activity.
+
+### 16.5 Android task/app-switcher privacy
+
+Logical TokenRow reveal state and operating-system previews are separate concerns.
+
+Where Android provides a supported mechanism, Totipo should prevent sensitive unlocked content and visible TOTP codes from being retained or shown in task/app-switcher previews.
+
+Protecting the preview must not require changing the underlying TokenRow reveal state.
+
+Notifications must not contain TOTP values unless a future feature explicitly designs and reviews such behavior.
+
+### 16.6 Biometric/device unlock
 
 Biometric unlock is a local device convenience. It is not a vault password and is not part of the Totipo synchronization protocol.
 
-Use platform biometric terminology and APIs rather than assuming a particular modality such as fingerprint or face recognition.
+Use platform biometric/device-authentication terminology and APIs rather than assuming a particular modality such as fingerprint or face recognition.
 
 Biometric unlock should only be enabled after a successful vault-password unlock.
 
-Local biometric unlock material must be protected using the platform's supported secure authentication/keystore facilities. Totipo must not persist the plaintext vault password merely to replay it after biometric authentication.
+Local unlock material must be protected using the platform's supported secure authentication/keystore facilities. Totipo must not persist the plaintext vault password merely to replay it after biometric authentication.
 
 Password unlock must remain available as a fallback.
 
 Enabling biometric unlock on one device must not modify synchronized vault state or enable biometric unlock on any other device.
 
-### 16.4 Password-wrapper changes and local biometric unlock
+On Android, after the vault has locked:
 
-When Totipo observes that the vault's password protection has changed, previously established local biometric unlock material should be treated as stale and must not silently bypass the new password state.
+- if local biometric/device unlock is enabled and available, Totipo may invoke the system authentication UI;
+- canceling authentication leaves Totipo locked;
+- canceling must not create a repeated prompt loop;
+- the user must still be able to choose vault-password unlock.
 
-Require a successful unlock using the current vault password before re-establishing local biometric unlock.
+Desktop implementations may add suitable local device authentication later; desktop v0 does not require it.
+
+### 16.7 Password-wrapper changes and local biometric unlock
+
+When Totipo observes that the vault's password protection has changed, previously established local biometric/device-unlock material should be treated as stale and must not silently bypass the new password state.
+
+Require one successful unlock using the current vault password before re-establishing local biometric/device unlock.
 
 This preserves the distinction between a synchronized vault password and device-local convenience authentication.
-
-### 16.5 Desktop locking
-
-Desktop should support explicit Lock.
-
-The application should also lock in response to an operating-system session lock and after the selected Totipo inactivity policy expires.
-
-Minimizing or hiding the desktop window should at least conceal displayed TOTP values. It need not immediately lock the vault unless the product lock policy requires it.
-
-### 16.6 App-switcher and background privacy
-
-On platforms that provide a supported mechanism, Totipo should prevent sensitive unlocked content from appearing in system task/app-switcher previews.
-
-Notifications must not contain TOTP values unless a future feature explicitly designs and reviews such behavior.
 
 ---
 
@@ -1527,11 +1571,22 @@ Use normal Android navigation semantics:
 
 Do not add an `Are you sure you want to exit?` prompt to normal Back behavior.
 
-### 19.6 Settings
+### 19.6 Settings and persisted local state
 
-A top-level Settings destination is not required for v0 unless genuine user preferences emerge.
+A top-level Settings destination is not required for v0.
 
-Security/interaction policies such as TokenRow reveal lifetime and clipboard lifetime should not become preferences merely because they are configurable in code.
+Security/interaction policies such as:
+
+- TokenRow reveal lifetime;
+- clipboard lifetime;
+- desktop inactivity timeout;
+- Android inactivity timeout;
+
+are fixed Totipo v0 policy and are not user preferences.
+
+The only preference-like application state required by this design is the last successfully opened vault location, or the platform-equivalent durable access reference described in §11.
+
+Device-local biometric unlock state is security material/capability state, not a synchronized user preference.
 
 ---
 
@@ -1777,16 +1832,118 @@ Components should be added only when real screens demonstrate a recurring need.
 
 ---
 
-## 29. Not yet fully specified
+## 29. V0 non-goals
 
-The following areas still need a dedicated pass before these guidelines should be considered complete:
+The v0 design deliberately does **not** require:
 
-- the exact default inactivity/background lock timeout and whether any platforms need different defaults;
+- pixel-identical desktop and Android UI;
+- a separate Totipo design-system implementation library;
+- a top-level Settings screen;
+- user-configurable reveal, clipboard, desktop lock, or Android lock timing;
+- desktop camera-based QR scanning;
+- automatic vault-wide duplicate-secret scanning;
+- generic destructive vault repair;
+- a general-purpose file manager inside vault selection;
+- a history/deleted-items browser;
+- bottom navigation or multiple top-level Android destinations;
+- a global "selected token" model or ambiguous global reveal shortcut;
+- synchronized biometric/device-unlock configuration;
+- password-change behavior that rotates the vault encryption key or re-encrypts vault contents.
+
+These may be revisited only when concrete product requirements justify them.
+
+---
+
+## 30. V0 implementation review checklist
+
+A desktop or Android implementation can be reviewed against the following baseline.
+
+### 30.1 Application lifecycle
+
+- Startup distinguishes no-vault, locked, unlocked, and blocking vault-error states.
+- The last successfully opened vault location/access reference is remembered locally.
+- Passwords are not remembered as application preferences.
+- Open Existing Vault and Create New Vault are separate intents.
+- Locking follows the fixed platform policy in §16.
+
+### 30.2 Main product workflow
+
+- The normal path is find TOTP → Show Code → Copy.
+- `Add TOTP` is the primary collection action.
+- Edit/Delete/Refresh/Change Vault remain visually secondary.
+- Search operates on issuer/account only.
+- User-facing ordering does not leak protocol/storage order.
+
+### 30.3 TokenRow
+
+- Codes are concealed by default.
+- `Show Code` is the primary hidden-row action.
+- Reveal lifetime follows the current-period / ≤10-second grace rule.
+- Rows reveal independently.
+- `Copy` copies the currently displayed canonical digits.
+- Copy does not extend disclosure.
+- Expiry/countdown is not communicated by graphics or color alone.
+
+### 30.4 Clipboard
+
+- Copied values are cleared on a best-effort basis at that exact code's rollover.
+- Cleanup never destroys newer clipboard contents.
+- A rollover never silently replaces the clipboard with the next TOTP.
+- Platform sensitive-clipboard facilities are used where appropriate.
+
+### 30.5 Add/Edit/Delete
+
+- QR/URI acquisition produces a reviewable draft before commit.
+- Raw secret material is not unnecessarily redisplayed.
+- Same issuer/account offers Update Existing versus Add Another.
+- Edit exposes identity first and uses explicit `Change setup…` for credential replacement.
+- Delete is a separate destructive action and discloses that vault history is not securely erased.
+
+### 30.6 Conflicts
+
+- Alternatives/versions are user choices; Heads are provenance.
+- Multiple Heads that produce one Alternative do not appear as duplicate choices.
+- Head count or client time is not treated as a vote/freshness winner.
+- Secret-only alternative differences remain distinguishable without exposing secret bytes.
+- Simple whole-version resolution is offered before field-level combination.
+- Newly arrived conflict information and publication uncertainty are represented truthfully.
+
+### 30.7 Vault states
+
+- Read-only vaults still permit safe TOTP retrieval.
+- Wrong location, unlock failure, unsupported/invalid data, unavailable data, and publication uncertainty remain distinct where the API can distinguish them.
+- Generic destructive `Repair Vault` behavior is not invented.
+
+### 30.8 Passwords and local unlock
+
+- Empty-password creation/opening requires explicit confirmation.
+- Change Vault Password explains that Totipo re-protects the existing vault encryption key rather than re-encrypting vault contents.
+- Historical retained copies are not promised to be revoked by a password change.
+- Android biometric/device unlock remains local and retains password fallback.
+- Local biometric/device-unlock material is invalidated/re-established appropriately after password-wrapper changes.
+
+### 30.9 Accessibility and platform behavior
+
+- Important meaning is not conveyed by color/icon alone.
+- Desktop is fully usable by keyboard for ordinary workflows.
+- Android uses appropriate touch targets and system Back behavior.
+- Sensitive Android task/app-switcher previews are protected.
+- Platform-native interaction conventions may differ without changing shared Totipo semantics.
+
+---
+
+## 31. Future design work
+
+The v0 behavioral design is sufficiently specified for implementation. Remaining work should be driven by implementation testing or new product requirements rather than completed speculatively.
+
+Likely future areas include:
+
 - detailed accessibility announcements for countdown rollover, copy feedback, lock transitions, and conflict updates;
-- visual token values after implementation testing;
-- history/deleted-item inspection, if exposed at all;
-- device admission/management UX, if exposed to end users;
-- exact platform-specific secure-storage implementation for local biometric unlock;
-- any explicit recovery workflows supported by future Java/API capabilities beyond the states defined here.
+- final visual token values after desktop and Android implementation testing;
+- history/deleted-item inspection, if a real user need emerges;
+- device admission/management UX, if exposed directly to end users;
+- platform-specific secure-storage implementation details for local biometric/device unlock;
+- explicit recovery workflows supported by future protocol/Java API capabilities;
+- future local preferences only when a concrete need justifies adding a Settings surface.
 
-These should be designed from concrete application behavior and API guarantees rather than invented in isolation.
+---
