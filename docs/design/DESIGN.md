@@ -1,6 +1,6 @@
 # Totipo Design Guidelines
 
-**Status:** Draft v0.6 — replacement candidate for the v0 product and visual-design baseline<br>
+**Status:** Draft v0.7 — v0 product and visual-design baseline<br>
 **Scope:** Cross-platform product and interaction design<br>
 **Protocol status:** Non-normative
 
@@ -613,16 +613,15 @@ Conceptually:
 ```text
 Vault identity / navigation
 
-Refresh        Add
-Search                                      token count
+Search [................................]   token count   Add
 
-Token list
+Token list / contextual empty state
     TokenRow
     TokenRow
     ConflictGroup
 ```
 
-Exact desktop/Android geometry may differ.
+Exact desktop/Android geometry may differ. On desktop, Search should normally absorb spare width while the count and `Add` remain compact trailing controls.
 
 ### 7.1 Main hierarchy
 
@@ -671,25 +670,27 @@ For a conflict group, match if any semantic Alternative's issuer/account satisfi
 
 Filtering hides nonmatching rows in place.
 
-If no result matches:
+If no result matches, use the otherwise-empty list area for a contextual empty state:
 
 ```text
 No TOTPs match "foobar".
 
-Clear search
+Clear Search
 ```
 
-This must be distinct from an actually empty vault.
+This must be distinct from an actually empty vault. The normal Search/count/Add header remains visible; the count should communicate filtering, for example `0 of 18`. `Clear Search` is contextual and need not compete visually with the collection-level `Add`.
 
-An empty vault should instead encourage the collection action:
+An empty vault should instead use the list area to encourage the collection action:
 
 ```text
-No TOTPs yet.
+No TOTPs yet
 
-Add your first TOTP to this vault.
+Add a TOTP to get started.
 
 Add
 ```
+
+When the vault is genuinely empty, avoid placing a duplicate visually-primary `Add` immediately beside this call to action. Search may be omitted or de-emphasized because there is nothing to search.
 
 ### 7.4 Search and reveal state
 
@@ -731,7 +732,13 @@ User-configurable sorting is not required for v0.
 
 The persistent collection action should be prominent but may simply say `Add` where the object is unambiguous.
 
-Desktop may place a textual Add button near the utility controls/search.
+On desktop, the normal collection header should place `Add` at the trailing/right edge of the Search/count row:
+
+```text
+Search [................................]   18 TOTPs   Add
+```
+
+Search expands to consume spare width; the count remains secondary; command buttons remain content-sized. `Add` is normally the sole visually primary action in the ordinary populated collection view.
 
 Android may use an appropriate platform-native persistent Add action such as an app-bar action or floating action button.
 
@@ -741,7 +748,7 @@ The shared requirement is semantic prominence, not identical geometry.
 
 Refresh is a utility action and must not compete visually with Add.
 
-Desktop may expose Refresh through the Vault menu, a shortcut, or a quiet toolbar control if manual refresh is operationally useful.
+On desktop, Refresh should not occupy permanent main-view space. Expose it through `Vault → Refresh` and, where useful, the desktop refresh shortcut. Android may follow platform conventions where an explicit refresh control is operationally meaningful.
 
 ### 7.9 Vault identity
 
@@ -1044,31 +1051,36 @@ The selector should optimize for navigation and selection, not behave like a min
 
 ### 10.1 Desktop
 
+The desktop existing-vault picker should be deliberately narrower than a general-purpose file manager.
+
 Conceptually:
 
 ```text
 Select Vault Folder
 
-/home/niki/Sources
-────────────────────────────────────
+/home/niki/Sources                                      Up
 
-../
 projects/
-totipo-vault/
+totipo-java/
+totipo-vault/        ← selected
 
-Selected folder
-/home/niki/Sources/totipo-vault
-
-                         Cancel   Select Folder
+                                      Cancel   Select Folder
 ```
 
-Directories are the primary selectable objects.
+Directories are the only ordinary selectable objects.
 
-The Totipo vault selector should not prominently expose unrelated destructive filesystem operations such as Delete or Rename.
+Interaction:
 
-`New Folder` may be available where platform-appropriate, but should remain a utility action.
+- single-click selects a displayed child directory;
+- `Select Folder` chooses the selected child directory;
+- double-click or Enter navigates into the selected child directory;
+- when no child is selected, `Select Folder` may choose the directory currently being displayed;
+- navigating into another directory clears stale child selection;
+- `Up` navigates to the parent directory.
 
-A generic file filter is not required for v0.
+The normal existing-vault picker should omit dot-prefixed/hidden directories by default and should not expose generic filesystem-management operations such as Rename, Delete, New Folder, filename entry, or file-type filters.
+
+The directory list should receive most of the available dialog space and support ordinary keyboard navigation. Totipo does not need a miniature file manager merely to identify an existing vault.
 
 ### 10.2 Native chooser policy
 
@@ -1148,7 +1160,7 @@ Conceptually:
 ApplicationShell
    │
    ├── NO_VAULT
-   │     No vault selected
+   │     Choose a vault to continue
    │     Select Vault…
    │     Create New Vault…
    │
@@ -1173,20 +1185,23 @@ Platform utility/modal surfaces such as a filesystem chooser, confirmation, edit
 
 ### 12.1 No-vault state
 
-If there is no remembered usable vault:
+If there is no remembered usable vault, present a sparse first-run/return state rather than a form anchored to a corner.
+
+Desktop should use a centered task composition with a modest upward bias:
 
 ```text
-Totipo
+Choose a vault to continue
 
-No vault selected
+      Select Vault
 
-Select a vault to get started.
-
-Select Vault…
-Create New Vault…
+   Create New Vault…
 ```
 
-These are peer entry points. If one path is clearly the common product path on a platform, it may be visually primary; otherwise use two normal actions rather than inventing an arbitrary primary winner.
+`Select Vault` is the visually primary path. `Create New Vault…` is secondary and may appear beneath it. The heading and action group should read as one centered first-impression state.
+
+This is an intentional exception to the normal trailing/right-aligned desktop form-action rule: `NO_VAULT` is an empty/welcome state, not an ordinary data-entry form.
+
+Other platforms may adapt the geometry while preserving the same hierarchy and wording intent.
 
 ### 12.2 Locked state
 
@@ -1661,7 +1676,7 @@ Vault
     Change Vault Password…
     About This Vault…
 
-TOTP
+Token
     Add…
     Edit…                 contextual/selected item
     Delete…               contextual/selected item
@@ -1686,8 +1701,7 @@ The unlocked desktop view remains approximately:
 ```text
 totipo-vault
 
-Refresh      Add
-Search                                      token count
+Search [................................]   token count   Add
 
 TokenRow
 TokenRow
@@ -1695,7 +1709,7 @@ ConflictGroup
 TokenRow
 ```
 
-The exact path does not dominate this view.
+Refresh remains in the Vault menu rather than occupying permanent collection space. The exact path does not dominate this view.
 
 `About This Vault…` is a secondary surface for safe vault-level information such as:
 
@@ -2166,7 +2180,7 @@ A desktop ordinary row targets roughly 64–72 logical units depending on font s
 
 Long identity text may clip/elide with accessible full text; ordinary use should not require horizontal list scrolling.
 
-Conflict groups may have a lightweight containing boundary/amber semantic edge because they group multiple semantic versions. Child rows reuse normal TokenRow surfaces/geometry.
+Conflict groups may have a lightweight containing boundary/amber semantic edge because they group multiple semantic versions. A thin neutral horizontal divider should separate the group-level `Conflict` / `Resolve` header from the first Alternative row. Child rows reuse normal TokenRow surfaces/geometry.
 
 ### 25.8 Radius and elevation
 
@@ -2264,10 +2278,12 @@ Key profile rules:
 - ordinary controls around 34–36 high where platform metrics permit;
 - compact inline actions around 30–32;
 - two-column forms with intrinsic labels and expanding aligned controls;
+- normal populated collection header uses Search + secondary count + trailing Add, with deliberate vertical breathing room above and below;
 - token list separated primarily by whitespace/thin dividers;
 - one outer vertical scroller for long forms;
 - restrained selection plus clear keyboard focus;
-- native menus/dialog behavior and normal resizable-window semantics;
+- desktop menus use modest additional padding when toolkit defaults are cramped, while preserving mnemonics, accelerators, keyboard navigation, and normal menu semantics;
+- native dialog/window behavior and normal resizable-window semantics;
 - no card-heavy or icon-heavy visual language.
 
 If the active Swing Look & Feel's default UI font is materially smaller than a comfortable modern utility baseline, Totipo may scale the application UI base modestly (roughly +1 to +2 logical points) while preserving the typography roles in §25.
@@ -2392,10 +2408,12 @@ A desktop or Android implementation can be reviewed against the following baseli
 ### 30.1 Application lifecycle
 
 - Startup distinguishes no-vault, locked, unlocked, and blocking vault states in a persistent application shell/screen model.
+- Desktop `NO_VAULT` uses the centered `Choose a vault to continue` state with Select Vault as the visually primary path and Create New Vault as secondary.
 - The currently selected recognizable Totipo vault location/access reference is remembered locally; successful password authentication is not required for that selection to remain current.
 - A location established not to be a Totipo vault does not replace the remembered vault.
 - Passwords are not remembered as application preferences.
 - Select Vault and Create New Vault are separate intents.
+- Desktop existing-vault selection is directory-only, hides dot/hidden directories by default, omits generic file-management controls, and supports selecting a highlighted child directory without first navigating into it.
 - Cancelling Change Vault before accepting a replacement returns to the previous vault locked when available; it never resurrects the old unlocked session.
 - At most one unlocked vault session exists at a time.
 - Locking follows the fixed platform policy in §16.
@@ -2405,6 +2423,10 @@ A desktop or Android implementation can be reviewed against the following baseli
 
 - The normal path is find TOTP → Show Code → Copy.
 - The collection action is semantically Add TOTP but may be labelled simply `Add` in an unambiguous context.
+- On desktop, the normal populated collection header is Search + count + trailing Add; Search expands and Add remains the sole visually primary collection action.
+- Desktop Refresh stays in the Vault menu rather than consuming permanent main-view space.
+- Active filtering reports a concise `M of N` count.
+- A genuinely empty vault and a zero-result search use distinct contextual empty states in the list area.
 - Edit/Delete/Refresh/Change Vault remain visually secondary.
 - Search operates only on issuer/account, using case-insensitive whitespace-split AND substring matching.
 - User-facing ordering does not leak protocol/storage order.
@@ -2477,6 +2499,8 @@ A desktop or Android implementation can be reviewed against the following baseli
 ### 30.9 Visual system and accessibility
 
 - Ordinary UI uses neutral surfaces and purposeful semantic accents.
+- Desktop collection headers and menus use deliberate spacing rather than relying on cramped toolkit defaults.
+- Conflict presentation visually separates the group-level header from Alternative rows with a thin neutral divider.
 - A view/dialog normally has at most one visually primary action; repeated TokenRow actions do not create a field of filled primary buttons.
 - Normal text/filled-action contrast targets §24.
 - Secondary text remains comfortably readable.
@@ -2498,20 +2522,18 @@ A desktop or Android implementation can be reviewed against the following baseli
 
 The v0 product model, interaction semantics, and visual foundations are sufficiently specified for the next implementation pass. Remaining work should primarily be driven by implementation testing, accessibility review, and concrete product requirements rather than speculative feature expansion.
 
-Immediate implementation work should include:
+Immediate implementation work should now center on:
 
-- bring the desktop Swing client into conformance with the persistent-shell NO_VAULT / LOCKED / UNLOCKED / blocking-state model and remembered-selected-vault behavior;
-- adopt the shared visual tokens/component states and desktop visual profile, including the one-primary-action rule, compactly-roomy geometry, whitespace/thin-divider token list, modest radius/elevation, and sparse iconography;
-- update search to the issuer/account-only whitespace-split AND semantics and preserve reveal state across filtering;
-- replace global copy notification with local `Copy → Copied` feedback and apply the expiry-or-30-second clipboard bound;
 - reshape ordinary Edit around issuer/account plus setup summary, with separate `Change setup…` and `Delete TOTP…` flows;
 - complete Add TOTP URI/manual acquisition, review, and explicit same-issuer/account Update Existing / Add Another behavior;
 - restore the simple whole-version conflict resolver first, with `Combine details…` for field-level resolution and atomic Authenticator Setup choices;
-- implement/qualify explicit Lock, unconditional `Ctrl+L` child-flow retirement, 15-minute desktop inactivity lock, OS-session lock, and suspend/resume lock behavior;
 - align read-only and blocking vault-state presentation with this revision, including discoverable unavailable mutation actions;
 - add `About This Vault…` as the secondary vault-identity/details surface;
-- perform manual light/dark-theme contrast and density review;
-- perform keyboard/accessibility review under real desktop environments.
+- complete the concise Change Vault Password experience;
+- perform final manual light/dark-theme contrast and density review;
+- perform final keyboard/accessibility review under real desktop environments.
+
+The persistent desktop shell, core lock/inactivity behavior, main collection composition, local copy feedback, search behavior, and initial desktop visual foundation are now sufficiently specified to serve as the baseline for that work.
 
 Likely later areas include:
 
