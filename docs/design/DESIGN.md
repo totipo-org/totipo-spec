@@ -1,6 +1,6 @@
 # Totipo Design Guidelines
 
-**Status:** Draft v0.7 — v0 product and visual-design baseline<br>
+**Status:** Draft v0.8 — v0 product and visual-design baseline<br>
 **Scope:** Cross-platform product and interaction design<br>
 **Protocol status:** Non-normative
 
@@ -49,7 +49,7 @@ The product hierarchy is:
 4. **Exceptional state handling**
    - Resolve conflicts when the user is ready.
    - Handle invalid/corrupt data.
-   - Handle read-only or otherwise constrained vault state.
+   - Handle unavailable or otherwise constrained application/vault state.
    - Handle uncertain publication or newly arrived conflict information.
 
 Exceptional operations may become visually prominent when they are relevant, but they should not dominate the normal interface.
@@ -88,7 +88,7 @@ Android should behave like an Android application: touch-sized controls, system 
 
 ### 2.5 State is visible
 
-Conflict, error, read-only operation, pending state, and similar conditions must be represented textually.
+Conflict, error, unavailable actions, pending state, and similar conditions must be represented textually.
 
 Color, icons, borders, and animation may reinforce meaning but must not carry the meaning alone.
 
@@ -1365,7 +1365,9 @@ No additional success dialog is required.
 
 Changing the vault password does **not** re-encrypt vault contents and does **not** rotate the vault encryption key.
 
-This semantic fact remains normative even when the normal UI uses consequence-focused wording rather than implementation mechanics.
+These semantics remain unchanged; the normal UI uses consequence-focused wording rather than implementation mechanics.
+
+Changing the vault password requires successful reauthentication with the **current vault password**. An already-unlocked session alone does not authorize replacement of the credential controlling future vault access. Ordinary vault use and Add/Edit/Delete/Resolve operations do not require this password reauthentication.
 
 ### 14.1 User-facing consequence
 
@@ -1374,10 +1376,13 @@ The normal Change Vault Password screen should stay concise:
 ```text
 Change Vault Password
 
+Current password
+[                         ]
+
 New password
 [                         ]
 
-Confirm password
+Confirm new password
 [                         ]
 
 Old backups or retained copies may still be accessible with the previous password.
@@ -1389,11 +1394,11 @@ Do not require the user to read an implementation explanation about vault/root k
 
 ### 14.2 Technical truth and documentation
 
-Documentation/details may explain that Totipo keeps the existing vault encryption key and changes how that key is protected by the password. Vault contents are not re-encrypted merely because the password wrapper changes.
+Documentation/details may explain that Totipo keeps the same vault encryption key/root and rewraps it with the new password. Vault contents are not re-encrypted merely because the password wrapper changes, and the vault root is not rotated.
 
 Previous copies may still exist in backups, synchronization history, or other retained storage and may still be accessible using the old password.
 
-Do not promise revocation or erasure of historical copies.
+Do not promise revocation or secure erasure of historical copies.
 
 Do not present fake progress implying that every TOTP object is being rewritten.
 
@@ -1401,16 +1406,25 @@ Do not present fake progress implying that every TOTP object is being rewritten.
 
 Collect:
 
+- current vault password;
 - new password;
-- confirmation.
+- new-password confirmation.
 
-Do not impose arbitrary password composition rules.
+Current-password input is always required, even when the vault is already unlocked. The application should not retain the original unlock password merely to avoid asking for it here.
+
+Do not impose arbitrary password composition rules. Platform-standard reveal-password behavior is acceptable.
+
+`Change Password` remains activatable when input is incomplete or invalid. Activation performs validation and focuses the first actionable problem. A wrong current password is a local authentication failure and must not imply vault corruption.
 
 Empty new password requires explicit confirmation.
 
 The action is called **Change Vault Password** / **Change Password**, not `Re-encrypt Vault`, `Rotate Encryption`, or similar terminology.
 
-Change Vault Password is available only for an unlocked writable vault.
+### 14.4 Availability
+
+Change Vault Password is available only for an unlocked vault when the current platform/session supports password-wrapper replacement.
+
+If the implementation reports that this operation is genuinely unavailable, the UI may disable it with an accessible explanation. Do not infer that the operation is unavailable from an arbitrary prior failed write.
 
 ---
 
@@ -1555,7 +1569,9 @@ Notifications must not contain TOTP values unless a future feature explicitly de
 
 ### 16.6 Biometric/device unlock
 
-Biometric unlock is a local device convenience. It is not a vault password and is not part of the Totipo synchronization protocol.
+Biometric/device unlock is a local device convenience for regaining access to an already-known vault. It is not a vault password and is not part of the Totipo synchronization protocol.
+
+In v0.8, local biometric/device authentication does not replace entry of the current vault password when changing the vault password (§14).
 
 Use platform biometric/device-authentication terminology and APIs rather than assuming a particular modality such as fingerprint or face recognition.
 
@@ -1571,44 +1587,19 @@ Do not allow stale local biometric/device-unlock material to silently bypass a c
 
 ---
 
-## 17. Read-only, unavailable, and invalid vault states
+## 17. Unavailable, invalid, and constrained vault states
 
 Vault-level failure modes should preserve distinctions the implementation can establish. Do not flatten every problem into `Error opening vault`.
 
 The persistent shell should represent these conditions without pretending all of them are the same generic `VAULT_ERROR`.
 
-### 17.1 Read-only vault
+### 17.1 No inferred read-only vault state
 
-Read-only is a persistent attribute of an otherwise usable unlocked vault, not a reason to block ordinary TOTP retrieval.
+Totipo v0 does not define an automatic global Read-only vault state or provide an `Open Read-Only` mode.
 
-When Totipo can safely read the vault but cannot modify it, the user may still:
+A failed write, definite publication failure, publication uncertainty, invalid/corrupt data, or unavailable data must not be relabeled as Read-only. A filesystem/write failure alone does not establish that the entire vault cannot be modified.
 
-- search;
-- reveal TOTP codes;
-- copy TOTP codes;
-- view conflict/version details and diagnostics.
-
-Mutation actions are unavailable, including:
-
-- Add;
-- Edit;
-- Delete;
-- Change Setup;
-- Resolve conflict;
-- Change Vault Password;
-- other operations that require publication.
-
-Represent the state textually, for example:
-
-```text
-Read-only
-
-You can view and copy TOTP codes, but changes cannot be saved to this vault.
-```
-
-Read-only is not an error and does not require amber/red treatment. Important unavailable actions may remain disabled-but-discoverable with an accessible explanation of why they are unavailable.
-
-A generic failed write must not automatically be relabeled `read-only`; transient I/O failure and publication uncertainty are different states.
+An explicit user-selected read-only session or an affirmatively reported backend/storage read-only capability would require a separate product design driven by a concrete requirement. Neither is part of v0.8.
 
 ### 17.2 Preserve known distinctions
 
@@ -1619,7 +1610,6 @@ Examples of distinct user-facing conditions include:
 - unsupported vault/protocol version;
 - required data unavailable;
 - invalid/integrity-failing vault data;
-- read-only state;
 - publication uncertainty.
 
 Use the most specific truthful condition available from the API.
@@ -1639,7 +1629,7 @@ Try Again    Change Vault…
 Details…
 ```
 
-Blocking is a shell content state. Diagnostic details must not expose secrets, passwords, or decrypted credential material.
+Blocking is a shell content state. A definite publication failure or publication uncertainty alone does not establish a blocking vault condition. Diagnostic details must not expose secrets, passwords, or decrypted credential material.
 
 ### 17.4 Localized failures
 
@@ -1647,9 +1637,9 @@ If the API can safely establish the rest of the vault while identifying a locali
 
 ### 17.5 Publication uncertainty
 
-Publication uncertainty is operation-specific: Totipo cannot affirm whether a requested change persisted.
+A definite publication failure belongs to the operation that failed. Publication uncertainty is also operation-specific: Totipo cannot affirm whether a requested change persisted.
 
-Do not relabel the entire vault `read-only`, `corrupt`, or `failed` because one publication result is uncertain. Present the uncertainty truthfully and use observation/refresh/reopen to establish current state.
+Do not turn one uncertain publication into a vault-global failure or blocking condition. Present the uncertainty truthfully and use observation/refresh/reopen to establish current state.
 
 ### 17.6 Recovery actions
 
@@ -1714,9 +1704,13 @@ Refresh remains in the Vault menu rather than occupying permanent collection spa
 `About This Vault…` is a secondary surface for safe vault-level information such as:
 
 - full filesystem/storage location;
-- writable/read-only status;
+- storage/access capability where the application can truthfully report it;
 - vault/protocol format/version where useful;
 - safe vault-level diagnostics/details.
+
+Do not infer writable/read-only status from an arbitrary operation failure. When the platform/API does not expose storage/access capability, omit the field or explain that the capability is not reported. Such details do not define a global vault mode in v0.8.
+
+Show vault/protocol format metadata only where actually available; do not substitute the installed library version for unknown vault-format metadata.
 
 A future application-level `Help → About Totipo` remains conceptually separate from `About This Vault…`.
 
@@ -1817,7 +1811,6 @@ Totipo applications should share a small vocabulary of semantic states.
 | Conflict | Multiple semantic versions exist; the user may continue using them and resolve when ready |
 | Error | An operation failed |
 | Invalid / corrupt | Data cannot safely be interpreted |
-| Read-only | Content is visible but modification is unavailable |
 | Deleted | Logical deletion/tombstone state |
 | Disabled | Action is currently unavailable |
 | Publication uncertain | Totipo cannot affirm whether a change persisted |
@@ -1831,7 +1824,7 @@ A `FieldMessage` should represent help/validation tied to one field.
 
 None of these should rely on color or iconography alone.
 
-Read-only, Locked, and Deleted are not errors merely because they are non-Normal states.
+Locked and Deleted are not errors merely because they are non-Normal states.
 
 ---
 
@@ -1955,7 +1948,7 @@ Activating the action performs authoritative validation and, when validation fai
 
 Opportunistic validation while editing is allowed, but users must never have to infer what is wrong solely from a disabled primary button.
 
-This rule is about form validity. An action may still be unavailable because the underlying application state genuinely forbids it (for example, mutation in a read-only vault or a retired/locked session). Such unavailability must have an accessible explanation rather than relying on a mysteriously disabled control. After a valid submission has started, a transient busy/in-progress state may prevent duplicate submission.
+This rule is about form validity. An action may still be unavailable because the underlying application state genuinely forbids it (for example, a retired/locked session or a genuinely unavailable required operation/capability). Such unavailability must have an accessible explanation rather than relying on a mysteriously disabled control. After a valid submission has started, a transient busy/in-progress state may prevent duplicate submission.
 
 Escape/system Back should normally correspond to the neutral cancellation path unless doing so would discard meaningful work without an appropriate confirmation.
 
@@ -2103,7 +2096,7 @@ Semantic surfaces
 
 Do not use one generic `disabled` color for all disabled-state properties; disabled text, surface, and border are distinct state treatments.
 
-Read-only, disabled, selected, warning, and conflict must remain visually distinct.
+`ReadOnlyValue`, Disabled, Selected, Warning, and Conflict treatments must remain visually distinct.
 
 ### 25.4 Semantic color behavior
 
@@ -2115,11 +2108,11 @@ Examples:
 - near-expiry: amber countdown ring/text accent;
 - invalid/error: red field/status accent;
 - destructive confirmation: danger action;
-- read-only: neutral/informational state, not warning red/amber;
+- `ReadOnlyValue`: readable text on a neutral surface, not warning red/amber or disabled styling;
 - locked: ordinary shell state, not error;
 - deleted: ordinary semantic value, not persistent danger styling.
 
-Selection is an interaction state, not a semantic state. Use a subtle accent tint/outline and do not erase warning/conflict/read-only meaning.
+Selection is an interaction state, not a semantic state. Use a subtle accent tint/outline and do not erase warning/conflict meaning.
 
 ### 25.5 Component states
 
@@ -2133,7 +2126,7 @@ Selection is an interaction state, not a semantic state. Use a subtle accent tin
 
 **Editable input**: `surfaceInput`, visible ordinary border, normal text; focus adds clear focus treatment.
 
-**Read-only value**: full-strength readable text on a neutral/read-only surface; selectable/copyable where useful; must not look disabled.
+**Read-only value** (`ReadOnlyValue`): full-strength readable text on a neutral surface; selectable/copyable where useful; must not look disabled.
 
 **Disabled control**: subdued text/surface/border, no interaction, still understandable.
 
@@ -2388,6 +2381,8 @@ The v0 design deliberately does **not** require:
 - desktop camera-based QR scanning;
 - automatic vault-wide duplicate-secret scanning;
 - generic destructive vault repair;
+- an automatic global Read-only vault state inferred from failed writes;
+- an explicit `Open Read-Only` session mode;
 - a general-purpose file manager inside vault selection;
 - a history/deleted-items browser;
 - bottom navigation or multiple top-level Android destinations;
@@ -2481,8 +2476,8 @@ A desktop or Android implementation can be reviewed against the following baseli
 
 ### 30.7 Vault states
 
-- Read-only vaults still permit safe TOTP retrieval.
-- Mutation actions are disabled/absent with an explanation in read-only state.
+- v0 does not infer a global Read-only vault state from write/publication failure, publication uncertainty, invalid data, or unavailable data.
+- Definite publication failure and publication uncertainty remain operation-specific.
 - Wrong location, unlock failure, unsupported/invalid data, unavailable data, and publication uncertainty remain distinct where the API can distinguish them.
 - Blocking vault state does not show a normal token list.
 - Localized failures remain localized where safe.
@@ -2491,9 +2486,11 @@ A desktop or Android implementation can be reviewed against the following baseli
 ### 30.8 Passwords and local unlock
 
 - Empty-password creation/opening requires explicit confirmation.
-- Change Vault Password keeps the normal UI consequence-focused while remaining technically truthful about key-wrapper semantics.
+- Change Vault Password requires the current vault password plus the new password/confirmation; an unlocked session alone does not authorize changing the future unlock credential.
+- Change Vault Password keeps the normal UI consequence-focused and rewraps the unchanged vault key/root without rotating it or re-encrypting vault contents.
+- Empty new password requires explicit confirmation.
 - Historical retained copies are not promised to be revoked by a password change.
-- Android biometric/device unlock remains local and retains password fallback.
+- Android biometric/device unlock remains local and retains password fallback; in v0.8 it does not substitute for entry of the current vault password during password change.
 - Local biometric/device-unlock material is invalidated/re-established appropriately after password-wrapper changes.
 
 ### 30.9 Visual system and accessibility
@@ -2506,7 +2503,7 @@ A desktop or Android implementation can be reviewed against the following baseli
 - Secondary text remains comfortably readable.
 - Semantic color does not flood large surfaces by default.
 - Selection is subdued and does not replace conflict/warning meaning.
-- Editable, read-only, and disabled controls are visually distinct.
+- Editable inputs, read-only values, and disabled controls are visually distinct.
 - Desktop forms use aligned expanding controls and consistent spacing rhythm.
 - Ordinary token rows use whitespace/thin dividers rather than card-heavy layout.
 - Focus remains clearly visible and does not move component geometry.
@@ -2527,9 +2524,9 @@ Immediate implementation work should now center on:
 - reshape ordinary Edit around issuer/account plus setup summary, with separate `Change setup…` and `Delete TOTP…` flows;
 - complete Add TOTP URI/manual acquisition, review, and explicit same-issuer/account Update Existing / Add Another behavior;
 - restore the simple whole-version conflict resolver first, with `Combine details…` for field-level resolution and atomic Authenticator Setup choices;
-- align read-only and blocking vault-state presentation with this revision, including discoverable unavailable mutation actions;
+- align blocking/unavailable vault-state presentation with truthful API distinctions and discoverable genuinely unavailable actions;
 - add `About This Vault…` as the secondary vault-identity/details surface;
-- complete the concise Change Vault Password experience;
+- complete the concise Change Vault Password experience with current-password reauthentication;
 - perform final manual light/dark-theme contrast and density review;
 - perform final keyboard/accessibility review under real desktop environments.
 
@@ -2540,6 +2537,7 @@ Likely later areas include:
 - detailed accessibility announcements for countdown rollover, lock transitions, and conflict updates;
 - refinement of exact platform color values after light/dark implementation testing;
 - history/deleted-item inspection, if a real user need emerges;
+- explicit user-selected read-only sessions or backend-reported read-only capability, if a concrete requirement justifies a separate product design;
 - device admission/management UX, if exposed directly to end users;
 - platform-specific secure-storage implementation details for local biometric/device unlock;
 - explicit recovery workflows supported by future protocol/Java API capabilities;
