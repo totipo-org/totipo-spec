@@ -1,6 +1,6 @@
 # Totipo Design Guidelines
 
-**Status:** Draft v0.8 — v0 product and visual-design baseline<br>
+**Status:** Draft v0.9 — v0 product and visual-design baseline<br>
 **Scope:** Cross-platform product and interaction design<br>
 **Protocol status:** Non-normative
 
@@ -117,7 +117,7 @@ Examples:
 - Hidden TOTP row: **Show Code**
 - Revealed TOTP row: **Copy**
 - Vault collection: **Add**
-- Add flow: **Add**
+- Add flow: **Add** for manual entry or reviewed setup; **Review** for QR/setup-URI acquisition
 - Edit flow: **Save**
 - Conflict-resolution flow: **Resolve** or **Save Resolution**
 - Vault selection: **Select Folder**
@@ -468,18 +468,19 @@ Adding a TOTP is the primary collection-level action.
 
 Where the object is unambiguous, the persistent collection control should normally say **Add**. The resulting screen or flow may be titled **Add TOTP**. Do not use implementation-oriented wording such as `Create Token` in normal UI.
 
-### 6.1 Acquisition and review are separate
+### 6.1 Imported acquisition and manual entry have different commit paths
 
-Credential acquisition is separate from credential review.
+QR scanning and explicit setup URI import/paste produce a parsed draft. The user must review its interpreted identity and authenticator configuration before commit. Manual entry exposes the complete editable fields directly, so the manual form itself is the review surface.
+
+This distinction applies across desktop and Android; platform presentation may differ while preserving these commit semantics.
 
 Conceptually:
 
 ```text
-Acquire
+Imported setup
     |
     +-- Scan QR
-    +-- Paste setup URI
-    +-- Manual entry
+    +-- Paste/import setup URI
     |
     v
 Parsed TOTP draft
@@ -488,10 +489,22 @@ Parsed TOTP draft
 Review
     |
     v
-Add / Update
+Add / Update Existing decision
+
+Manual entry
+    |
+    v
+Validate editable fields
+    |
+    v
+Add / Update Existing decision
 ```
 
-Scanning or pasting must not immediately commit a credential.
+Scanning or pasting must not immediately commit a credential. The primary action for QR/setup-URI acquisition is `Review`; a setup URI proceeds to Review before the duplicate-identity decision and commit.
+
+Manual entry does not require a second Review screen because the editable manual form is already the review surface. Its primary completion action is `Add`. Mode-specific labels follow the actual next semantic action even when both modes belong to the same Add TOTP task.
+
+Imported acquisition requires explicit review of interpreted values. Direct manual entry already exposes the values being committed: a second Review screen repeats what the user just entered and adds friction without increasing understanding, because all relevant non-secret configuration is visible and editable.
 
 ### 6.2 Platform acquisition methods
 
@@ -528,7 +541,7 @@ Manual setup should collect:
 
 - issuer/service;
 - account;
-- secret.
+- new secret.
 
 Authenticator parameters are visible but visually secondary:
 
@@ -540,9 +553,17 @@ The common/default configuration should not dominate the form.
 
 Desktop may use full-width exclusive-choice controls for algorithm and digits plus a bounded numeric period control. Android may use equivalent native controls.
 
-### 6.5 Review
+Manual entry is itself the editable review surface. Its normal primary completion action is `Add`, not `Review`.
 
-The review screen should present the user-meaningful identity and authenticator configuration.
+`Add` remains activatable with incomplete or invalid input. Activating it performs authoritative validation; invalid input does not publish and remains on the same form with local field/group errors and focus/scroll to the first actionable problem (§23).
+
+Successful validation proceeds directly to the duplicate-identity handling in §6.7 and, where no duplicate decision is required, publication. The user need not re-enter or reconfirm the new secret because there is no second Review screen.
+
+### 6.5 Review imported setup
+
+This separate Review screen applies to parsed/imported QR or setup-URI acquisition. Add TOTP Manual Entry does not use it.
+
+The review screen should present the user-meaningful identity and non-secret authenticator configuration.
 
 Imported non-default parameters must be visible before commit. Totipo should not silently hide unusual imported configuration.
 
@@ -575,7 +596,7 @@ Friendly normalization, such as accepting spaces in a manually entered Base32 se
 
 Totipo does not scan the vault for duplicate secrets.
 
-Instead, after acquisition/review, Totipo checks the current user-visible TOTP set for an existing active TOTP with the same issuer and account.
+Instead, after imported setup review or successful manual-entry validation, Totipo checks the current user-visible active TOTP set for a matching issuer and account.
 
 If exactly one match exists, explicitly offer:
 
@@ -587,7 +608,9 @@ Neither semantic choice should happen silently. If the UI requires a keyboard de
 
 `Update Existing…` should review the acquired authenticator setup as a proposed Change Authenticator Setup for the existing logical TOTP before commit.
 
-If multiple active matches exist, Totipo must not guess. The user chooses which existing TOTP to update or chooses to add another.
+If multiple active matches exist, Totipo must not guess. The user chooses which existing TOTP to update, chooses `Add Another`, or cancels.
+
+For Manual Entry, pressing `Add` publishes normally after validation if there is no match. If a match exists, `Add` does not immediately publish: show the explicit duplicate decision. `Add Another` confirms creation of another logical TOTP; `Update Existing…` uses the existing setup-replacement semantics in §8.2, including review before replacement. Cancel returns to the manual form/draft where practical. Never silently reinterpret `Add` as replacement.
 
 Matching is based on user-visible identity, not secret comparison.
 
@@ -800,7 +823,9 @@ The setup summary is non-secret. Existing secret material is never displayed.
 
 `Change setup…` is an explicit sub-flow for replacing the credential setup.
 
-It may reuse the same acquisition/review model as Add TOTP:
+Draft v0.9 changes the direct Manual Add path in §6 only. Change Authenticator Setup retains its existing acquisition/review behavior, including for manual replacement and `Update Existing…`; this revision does not extend direct Manual Add semantics to setup replacement.
+
+Its acquisition methods remain:
 
 - QR scan where supported;
 - setup URI;
@@ -813,7 +838,7 @@ Manual setup may expose:
 - digits;
 - period.
 
-Algorithm/digits/period remain secondary to the actual acquisition task, but unusual imported values must be reviewable before commit.
+Algorithm/digits/period remain secondary to the actual acquisition task, but parsed URI/QR values, including unusual imported configuration, must remain reviewable before replacing setup.
 
 Changing setup modifies the existing logical TOTP rather than deleting it and creating an unrelated logical token.
 
@@ -1571,7 +1596,7 @@ Notifications must not contain TOTP values unless a future feature explicitly de
 
 Biometric/device unlock is a local device convenience for regaining access to an already-known vault. It is not a vault password and is not part of the Totipo synchronization protocol.
 
-In v0.8, local biometric/device authentication does not replace entry of the current vault password when changing the vault password (§14).
+In v0.9, local biometric/device authentication does not replace entry of the current vault password when changing the vault password (§14).
 
 Use platform biometric/device-authentication terminology and APIs rather than assuming a particular modality such as fingerprint or face recognition.
 
@@ -1599,7 +1624,7 @@ Totipo v0 does not define an automatic global Read-only vault state or provide a
 
 A failed write, definite publication failure, publication uncertainty, invalid/corrupt data, or unavailable data must not be relabeled as Read-only. A filesystem/write failure alone does not establish that the entire vault cannot be modified.
 
-An explicit user-selected read-only session or an affirmatively reported backend/storage read-only capability would require a separate product design driven by a concrete requirement. Neither is part of v0.8.
+An explicit user-selected read-only session or an affirmatively reported backend/storage read-only capability would require a separate product design driven by a concrete requirement. Neither is part of v0.9.
 
 ### 17.2 Preserve known distinctions
 
@@ -1708,7 +1733,7 @@ Refresh remains in the Vault menu rather than occupying permanent collection spa
 - vault/protocol format/version where useful;
 - safe vault-level diagnostics/details.
 
-Do not infer writable/read-only status from an arbitrary operation failure. When the platform/API does not expose storage/access capability, omit the field or explain that the capability is not reported. Such details do not define a global vault mode in v0.8.
+Do not infer writable/read-only status from an arbitrary operation failure. When the platform/API does not expose storage/access capability, omit the field or explain that the capability is not reported. Such details do not define a global vault mode in v0.9.
 
 Show vault/protocol format metadata only where actually available; do not substitute the installed library version for unknown vault-format metadata.
 
@@ -2362,6 +2387,8 @@ Diagnostics
     TokenDiagnostics
 ```
 
+`AddTOTPFlow` includes imported acquisition followed by Review and direct validated Manual Add. `TOTPReview` provides parsed/imported setup review; it is not mandatory after Add TOTP Manual Entry. Change Authenticator Setup retains its separate review behavior (§8.2).
+
 Components should be added only when real screens demonstrate a recurring need.
 
 The shared catalogue deliberately does not include generic cards, toast notifications, navigation rails, icon-only action buttons, or a general Settings item because v0 does not currently need them.
@@ -2450,7 +2477,8 @@ A desktop or Android implementation can be reviewed against the following baseli
 ### 30.5 Add/Edit/Delete
 
 - Form commit actions remain available when input is incomplete/invalid; activation exposes validation errors and focuses/scrolls to the first actionable problem.
-- QR/URI acquisition produces a reviewable draft before commit.
+- QR/URI acquisition produces a reviewable draft before commit and requires explicit Review.
+- Manual entry is the editable review surface and uses `Add` after validation without a redundant Review screen; invalid input remains on the form, and valid input proceeds to duplicate handling/publication.
 - Clipboard setup import is explicit, not background clipboard sniffing.
 - Raw secret material is not unnecessarily redisplayed.
 - Same issuer/account offers an explicit Update Existing versus Add Another decision without silent replacement.
@@ -2490,7 +2518,7 @@ A desktop or Android implementation can be reviewed against the following baseli
 - Change Vault Password keeps the normal UI consequence-focused and rewraps the unchanged vault key/root without rotating it or re-encrypting vault contents.
 - Empty new password requires explicit confirmation.
 - Historical retained copies are not promised to be revoked by a password change.
-- Android biometric/device unlock remains local and retains password fallback; in v0.8 it does not substitute for entry of the current vault password during password change.
+- Android biometric/device unlock remains local and retains password fallback; in v0.9 it does not substitute for entry of the current vault password during password change.
 - Local biometric/device-unlock material is invalidated/re-established appropriately after password-wrapper changes.
 
 ### 30.9 Visual system and accessibility
@@ -2522,7 +2550,7 @@ The v0 product model, interaction semantics, and visual foundations are sufficie
 Immediate implementation work should now center on:
 
 - reshape ordinary Edit around issuer/account plus setup summary, with separate `Change setup…` and `Delete TOTP…` flows;
-- complete Add TOTP URI/manual acquisition, review, and explicit same-issuer/account Update Existing / Add Another behavior;
+- complete imported URI review and direct validated Manual Add, with explicit same-issuer/account Update Existing / Add Another handling;
 - restore the simple whole-version conflict resolver first, with `Combine details…` for field-level resolution and atomic Authenticator Setup choices;
 - align blocking/unavailable vault-state presentation with truthful API distinctions and discoverable genuinely unavailable actions;
 - add `About This Vault…` as the secondary vault-identity/details surface;
