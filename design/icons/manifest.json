@@ -1,0 +1,14 @@
+{
+  "name": "Totipo",
+  "icon_system": 1,
+  "canonical_app_icon": "totipo-app-icon.svg",
+  "canonical_mark": "totipo-mark.svg",
+  "mark": {
+    "ring": 1,
+    "ticks": 3,
+    "dots": 3,
+    "shackle": false
+  },
+  "reference_png_sizes": [16, 24, 32, 48, 64, 128, 256, 512, 1024],
+  "platforms": ["android", "ios", "macos", "windows", "linux", "web"]
+}
