@@ -36,11 +36,14 @@ func Derive(root []byte) (Keys, error) {
 	prk := hkdf.Extract(sha256.New, root, make([]byte, 32))
 	return Keys{expand(prk, []byte("totipo/v1/object-id")), expand(prk, []byte("totipo/v1/object-key-root"))}, nil
 }
-func Fingerprint(root []byte) ([]byte, error) {
-	if len(root) != 32 {
+
+// VaultID hashes the exact canonical representation; it does not authenticate it.
+func VaultID(record []byte) ([]byte, error) {
+	if len(record) != 87 || !bytes.Equal(record[:11], []byte("TOTIPO-VLT\x01")) {
 		return nil, ErrCrypto
 	}
-	return MAC(root, []byte("totipo/v1/vault-fingerprint")), nil
+	id := sha256.Sum256(record)
+	return bytes.Clone(id[:]), nil
 }
 func (k Keys) ObjectKey(id []byte) []byte {
 	return expand(k.ObjectRoot, append([]byte("totipo/v1/object-key"), id...))
@@ -114,7 +117,7 @@ func WrapKey(password, salt []byte) ([]byte, error) {
 }
 
 // Wrap accepts explicit salt/nonce to support fixtures. Application writers must
-// use fresh CSPRNG values for both on every creation or rewrap (sections 8–9).
+// use fresh CSPRNG values for both at creation (sections 6–7).
 func Wrap(password, root, salt, nonce []byte) ([]byte, error) {
 	if len(root) != 32 || len(salt) != 16 || len(nonce) != 12 {
 		return nil, ErrCrypto

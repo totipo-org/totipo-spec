@@ -67,6 +67,20 @@ class SchemaContractTests(unittest.TestCase):
         with self.assertRaises(Invalid):
             validate(c, self.schema)
 
+    def test_no_vault_replacement_or_rewrap_contract(self):
+        c = read(BASE / 'cases/vault/v1.vault.create-existing.001.json')
+        validate(c, self.schema)
+        c['workflow']['action'] = 'replace'
+        with self.assertRaises(Invalid):
+            validate(c, self.schema)
+        c['workflow']['action'] = 'rewrap'
+        with self.assertRaises(Invalid):
+            validate(c, self.schema)
+        c['workflow']['action'] = 'create'
+        c['workflow']['base_hex'] = '01'
+        with self.assertRaises(Invalid):
+            validate(c, self.schema)
+
     def test_duplicate_members(self):
         with self.assertRaises(Invalid):
             json.loads('{"id": 1, "id": 2}', object_pairs_hook=pairs)

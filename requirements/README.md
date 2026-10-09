@@ -1,6 +1,6 @@
 # Requirements profiles
 
-[`v1-pre-rc.json`](v1-pre-rc.json) is the **moving pre-RC** profile for v1/r18.
+[`v1-pre-rc.json`](v1-pre-rc.json) is the **moving pre-RC** profile for v1/r19.
 It pins the exact specification, entire manifest, manifest schema, case schema,
 and every manifest case ID/hash. There are no conditional capabilities.
 

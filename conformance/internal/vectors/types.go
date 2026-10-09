@@ -1,4 +1,4 @@
-// Package vectors consumes the language-neutral r18 corpus.
+// Package vectors consumes the language-neutral r19 corpus.
 package vectors
 
 import (
@@ -69,13 +69,15 @@ type Crypto struct {
 	Object         string `json:"object_hex"`
 }
 type Bootstrap struct {
-	Password    string `json:"password_hex"`
-	Salt        string `json:"salt_hex"`
-	Nonce       string `json:"nonce_hex"`
-	WrapKey     string `json:"wrap_key_hex"`
-	Header      string `json:"header_hex"`
-	Record      string `json:"record_hex"`
-	Fingerprint string `json:"fingerprint_hex"`
+	ChangedRecord  string `json:"changed_record_hex,omitempty"`
+	ChangedVaultID string `json:"changed_vault_id_hex,omitempty"`
+	Password       string `json:"password_hex"`
+	Salt           string `json:"salt_hex"`
+	Nonce          string `json:"nonce_hex"`
+	WrapKey        string `json:"wrap_key_hex"`
+	Header         string `json:"header_hex"`
+	Record         string `json:"record_hex"`
+	VaultID        string `json:"vault_id_hex"`
 }
 type TOTP struct {
 	Source    string    `json:"source"`
@@ -123,11 +125,11 @@ type StorageCase struct {
 	Diagnostics   bool           `json:"diagnostics"`
 }
 type Workflow struct {
+	Vault            string `json:"vault_hex,omitempty"`
 	Action           string `json:"action"`
 	Kind             string `json:"kind"`
 	Existing         string `json:"existing_hex"`
 	Intended         string `json:"intended_hex"`
-	Base             string `json:"base_hex"`
 	Readable         bool   `json:"readable"`
 	Complete         bool   `json:"complete"`
 	Durable          bool   `json:"durable"`

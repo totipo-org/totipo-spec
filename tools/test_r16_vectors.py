@@ -66,16 +66,12 @@ class IndependentWireTests(unittest.TestCase):
                     expected.append((12, struct.pack('>Q', v['client_time'])))
                 self.assertEqual(fields, expected)
 
-    def test_fingerprint_and_maximum(self):
-        seen = {}
+    def test_vault_id_and_maximum(self):
         for entry in read(BASE / 'manifest.json')['cases']:
             c = read(BASE / entry['path'])
             if 'bootstrap' in c:
-                fp = mac(bytes.fromhex(c['root_hex']), b'totipo/v1/vault-fingerprint').hex()
-                self.assertEqual(fp, c['bootstrap']['fingerprint_hex'])
-                if c['root_hex'] in seen:
-                    self.assertEqual(fp, seen[c['root_hex']])
-                seen[c['root_hex']] = fp
+                vid = hashlib.sha256(bytes.fromhex(c['bootstrap']['record_hex'])).hexdigest()
+                self.assertEqual(vid, c['bootstrap']['vault_id_hex'])
         c = read(BASE / 'cases/size/v1.size.token-max-4.001.json')
         self.assertEqual(c['crypto']['semantic_length'], 1005)
         self.assertEqual(bytes.fromhex(c['crypto']['padded_plaintext_hex'])[-1], 0)

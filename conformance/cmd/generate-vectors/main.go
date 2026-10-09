@@ -1,4 +1,4 @@
-// Command generate-vectors explicitly regenerates r18 fixtures and moving pins.
+// Command generate-vectors explicitly regenerates r19 fixtures and moving pins.
 // It is never run by tests. Deterministic crypto fixtures use public test keys.
 package main
 
@@ -294,37 +294,32 @@ func main() {
 		}
 		envelope("encoding."+x.name, q, nil, false)
 	}
-	for _, x := range []struct {
-		name, password string
-		salt, nonce    byte
-	}{{"ascii", "fixture password", 0x33, 0x44}, {"empty", "", 0x33, 0x44}, {"unicode", "päss🔑", 0x33, 0x44}, {"rewrap", "replacement password", 0x55, 0x66}} {
-		c := base("bootstrap."+x.name, "bootstrap")
-		c.Expected = "VALID"
-		c.Root = hx(rootKey)
-		password := []byte(x.password)
-		salt := bytes.Repeat([]byte{x.salt}, 16)
-		nonce := bytes.Repeat([]byte{x.nonce}, 12)
-		// Preserve the original exact Unicode password and wrapping test inputs.
-		if x.name == "unicode" {
-			b, e := os.ReadFile(filepath.Join(root, "vectors/cases/bootstrap/v1.bootstrap.unicode.001.json"))
-			must(e)
-			var old struct {
-				Bootstrap struct {
-					Password string `json:"password_hex"`
-				}
-			}
-			must(json.Unmarshal(b, &old))
-			password = raw(old.Bootstrap.Password)
-		}
-		rec, e := cryptov1.Wrap(password, rootKey, salt, nonce)
+	// Existing bootstrap known answers are source fixtures. Never regenerate
+	// their password/root/salt/nonce/wrap-key/header/record during revision cuts.
+	for _, name := range []string{"ascii", "empty", "unicode", "known-answer-extra"} {
+		b, e := os.ReadFile(filepath.Join(root, "vectors/cases/bootstrap/v1.bootstrap."+name+".001.json"))
 		must(e)
-		key, e := cryptov1.WrapKey(password, salt)
+		var c vectors.Case
+		must(json.Unmarshal(b, &c))
+		vid, e := cryptov1.VaultID(raw(c.Bootstrap.Record))
 		must(e)
-		fp, e := cryptov1.Fingerprint(rootKey)
-		must(e)
-		c.Bootstrap = &vectors.Bootstrap{Password: hx(password), Salt: hx(salt), Nonce: hx(nonce), WrapKey: hx(key), Header: hx(rec[:39]), Record: hx(rec), Fingerprint: hx(fp)}
+		c.Bootstrap.VaultID = hx(vid)
 		cases = append(cases, c)
 	}
+	vaultBytes := raw(cases[len(cases)-4].Bootstrap.Record)
+	differentVaultBytes := raw(cases[len(cases)-1].Bootstrap.Record)
+	changed := bytes.Clone(vaultBytes)
+	changed[86] ^= 1
+	changedID, e := cryptov1.VaultID(changed)
+	must(e)
+	identityCase := cases[len(cases)-4]
+	identityCase.ID = "v1.bootstrap.vault-id-mutation.001"
+	identityCase.Notes = "One-bit tag mutation changes VAULT_ID; the altered representation is invalid authentication evidence, never a newer same-vault bootstrap."
+	identityBootstrap := *identityCase.Bootstrap
+	identityBootstrap.ChangedRecord = hx(changed)
+	identityBootstrap.ChangedVaultID = hx(changedID)
+	identityCase.Bootstrap = &identityBootstrap
+	cases = append(cases, identityCase)
 	graphCase("sequential", add(node("A", "T", "X")), add(node("B", "T", "Y", "A")), result("T", []string{"B"}, []string{"Y"}, nil))
 	graphCase("equal-concurrent", add(metadata(node("A", "T", "X"), "Laptop", 0)), add(metadata(node("B", "T", "X"), "Phone", ^uint64(0))), result("T", []string{"A", "B"}, []string{"X"}, nil))
 	graphCase("conflicting-concurrent", add(node("A", "T", "X")), add(node("B", "T", "Y")), result("T", []string{"A", "B"}, []string{"X", "Y"}, nil))
@@ -433,19 +428,24 @@ func main() {
 		workflow("storage."+x.name, vectors.Workflow{Action: "publish", Kind: x.kind, Existing: x.existing, Intended: intended, Complete: true, Durable: x.durable, ParentsAvailable: x.parents, Result: x.result})
 	}
 	for _, x := range []struct {
-		name, kind, result string
-		orphans, durable   bool
-	}{{"create-orphans", "absent", "CREATED", true, true}, {"create-empty", "absent", "CREATED", false, true}, {"create-existing", "regular", "FAILED", false, true}, {"create-ambiguous", "absent", "FAILED", true, false}} {
-		workflow("vault."+x.name, vectors.Workflow{Action: "create", Kind: x.kind, Complete: true, Durable: x.durable, OrphanObjects: x.orphans, Result: x.result})
+		name, kind, result            string
+		orphans, durable, revalidated bool
+		existing                      []byte
+	}{
+		{"create-orphans", "absent", "FAILED", true, true, true, nil},
+		{"create-empty", "absent", "CREATED", false, true, true, nil},
+		{"create-existing", "regular", "FAILED", false, true, true, vaultBytes},
+		{"create-different", "regular", "FAILED", false, true, true, differentVaultBytes},
+		{"create-ambiguous", "absent", "FAILED", false, false, true, nil},
+		{"create-revalidation-failed", "absent", "FAILED", false, true, false, nil},
+		{"create-wrong-type", "symlink", "FAILED", false, true, true, nil},
+	} {
+		workflow("vault."+x.name, vectors.Workflow{Action: "create", Kind: x.kind, Existing: hx(x.existing), Intended: hx(vaultBytes), Complete: true, Durable: x.durable, Readable: x.revalidated, OrphanObjects: x.orphans, Result: x.result})
 	}
-	for _, x := range []struct {
-		name, current, result string
-		readable, durable     bool
-	}{{"replace-equal", "01", "REPLACED", true, true}, {"replace-stale", "02", "STALE", true, true}, {"replace-unreadable", "", "FAILED", false, true}, {"replace-ambiguous", "01", "FAILED", true, false}} {
-		workflow("vault."+x.name, vectors.Workflow{Action: "replace", Kind: "regular", Base: "01", Existing: x.current, Complete: true, Readable: x.readable, Durable: x.durable, Result: x.result})
-	}
+	workflow("vault.object-publication-unchanged", vectors.Workflow{Action: "publish", Kind: "absent", Intended: r.Crypto.Object, Vault: hx(vaultBytes), Complete: true, Durable: true, Result: "PUBLISHED_NEW"})
+	workflow("vault.object-exact-retry-unchanged", vectors.Workflow{Action: "publish", Kind: "regular", Existing: r.Crypto.Object, Intended: r.Crypto.Object, Vault: hx(vaultBytes), Complete: true, Result: "ALREADY_PRESENT_EXACT"})
 	sort.Slice(cases, func(i, j int) bool { return cases[i].ID < cases[j].ID })
-	manifest := vectors.Manifest{Format: "totipo-vector-manifest-v1", Protocol: "totipo-v1", Revision: "r18", Cases: []vectors.Entry{}}
+	manifest := vectors.Manifest{Format: "totipo-vector-manifest-v1", Protocol: "totipo-v1", Revision: "r19", Cases: []vectors.Entry{}}
 	keep := map[string]bool{}
 	for _, c := range cases {
 		category := strings.Split(c.ID, ".")[1]
@@ -476,7 +476,7 @@ func main() {
 		case "storage":
 			sections = []string{"3", "13", "14"}
 		case "workflow":
-			sections = []string{"7", "8", "18"}
+			sections = []string{"3", "7", "18"}
 		}
 		if c.Expected == object.Invalid {
 			kind = "negative"
@@ -499,10 +499,10 @@ func main() {
 		must(e)
 		return vectors.Hash(b)
 	}
-	profile := vectors.Profile{Format: "totipo-requirements-v1", Status: "moving-pre-rc", Protocol: "totipo-v1", Revision: "r18", SpecSHA256: hashFile("spec/totipo-vault-format-v1.md"), ManifestSHA256: hashFile("vectors/manifest.json"), SchemaSHA256: hashFile("vectors/manifest.schema.json"), CaseSchemaSHA256: hashFile("vectors/case.schema.json"), Required: []vectors.Pin{}}
+	profile := vectors.Profile{Format: "totipo-requirements-v1", Status: "moving-pre-rc", Protocol: "totipo-v1", Revision: "r19", SpecSHA256: hashFile("spec/totipo-vault-format-v1.md"), ManifestSHA256: hashFile("vectors/manifest.json"), SchemaSHA256: hashFile("vectors/manifest.schema.json"), CaseSchemaSHA256: hashFile("vectors/case.schema.json"), Required: []vectors.Pin{}}
 	for _, e := range manifest.Cases {
 		profile.Required = append(profile.Required, vectors.Pin{ID: e.ID, SHA256: e.SHA256})
 	}
 	write(filepath.Join(root, "requirements/v1-pre-rc.json"), profile)
-	fmt.Printf("Generated r18: %d cases\n", len(cases))
+	fmt.Printf("Generated r19: %d cases\n", len(cases))
 }

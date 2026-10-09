@@ -1,4 +1,4 @@
-# Go v1/r18 reference/conformance consumer
+# Go v1/r19 reference/conformance consumer
 
 This Go 1.23+ module is the repository's reference consumer, not a production client.
 Run `make check`, `make race`, and `make fuzz` from the repository root. The CLI
@@ -26,7 +26,8 @@ failure excludes that identity from the model without poisoning unrelated tokens
 The model is deliberately small, not a scalable graph-index implementation.
 
 `internal/storage` models exact namespaces, candidate names, observation diagnostics,
-immutable publication, initial VAULT creation, and exact compare-before-replace.
+immutable publication, initial VAULT creation, no-replace creation with post-publication revalidation, orphan-object safety,
+and preservation of VAULT through object publication.
 Observed bootstrap entries must be regular files and object namespaces directories;
 wrong types are not followed or traversed. Backend booleans describe trusted API outcomes. They do not prove file/namespace
 persistence, staging behavior, host syscall races, or remote completeness. A live

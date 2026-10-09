@@ -21,25 +21,20 @@ func Install(existing, intended []byte, kind string, durable bool) ([]byte, stri
 	return bytes.Clone(intended), "PUBLISHED_NEW"
 }
 
-// Create needs canonical lowercase `vault` absence, not any inventory of object-looking files.
-func Create(kind string, complete, durable bool) string {
-	if kind != "absent" || !complete || !durable {
-		return "FAILED"
-	}
-	return "CREATED"
+// Store models canonical VAULT separately from immutable object publication.
+// It does not model filesystem races, persistence primitives, or remote completeness.
+type Store struct{ Vault []byte }
+
+func (s *Store) Publish(existing, intended []byte, kind string, durable bool) ([]byte, string) {
+	return Install(existing, intended, kind, durable)
 }
 
-// Replace compares exact BASE to freshly observed CURRENT at canonical `vault`. It does not model
-// atomic CAS and cannot rule out a race after this observation.
-func Replace(base, current []byte, kind string, readable, complete, durable bool) string {
-	if !BootstrapCandidate("vault", kind) || !readable {
-		return "FAILED"
+// Create is absent -> initial-create only. Revalidated denotes a successful
+// exact canonical reread and root-wrap validation after durable publication.
+// Failure leaves effects unknown; the returned bytes do not assert absence.
+func Create(existing, intended []byte, kind string, complete, durable, revalidated, orphans bool) ([]byte, string) {
+	if kind != "absent" || orphans || !complete || !durable || !revalidated || len(intended) != 87 {
+		return existing, "FAILED"
 	}
-	if !bytes.Equal(base, current) {
-		return "STALE"
-	}
-	if !complete || !durable {
-		return "FAILED"
-	}
-	return "REPLACED"
+	return bytes.Clone(intended), "CREATED"
 }

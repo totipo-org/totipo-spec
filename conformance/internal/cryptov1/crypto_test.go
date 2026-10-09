@@ -87,42 +87,24 @@ func FuzzOpen(f *testing.F) {
 	})
 }
 
-func TestRewrapPreservesRootAndFingerprint(t *testing.T) {
-	root := bytes.Repeat([]byte{0x19}, 32)
-	fp, e := Fingerprint(root)
+func TestVaultIDChangesWithRepresentation(t *testing.T) {
+	record, e := Wrap([]byte("p"), bytes.Repeat([]byte{1}, 32), make([]byte, 16), make([]byte, 12))
 	if e != nil {
 		t.Fatal(e)
 	}
-	first, e := Wrap([]byte("old"), root, bytes.Repeat([]byte{1}, 16), bytes.Repeat([]byte{2}, 12))
+	first, e := VaultID(record)
 	if e != nil {
 		t.Fatal(e)
 	}
-	second, e := Wrap([]byte("new"), root, bytes.Repeat([]byte{3}, 16), bytes.Repeat([]byte{4}, 12))
-	if e != nil {
-		t.Fatal(e)
+	record[86] ^= 1
+	second, e := VaultID(record)
+	if e != nil || bytes.Equal(first, second) {
+		t.Fatal("changed representation retained identity", e)
 	}
-	if bytes.Equal(first, second) {
-		t.Fatal("wrapper did not change")
+	if _, e := Unwrap([]byte("p"), record); e == nil {
+		t.Fatal("changed tag authenticated")
 	}
-	for i, record := range [][]byte{first, second} {
-		password := []byte("old")
-		if i == 1 {
-			password = []byte("new")
-		}
-		got, e := Unwrap(password, record)
-		if e != nil || !bytes.Equal(got, root) {
-			t.Fatal("retained wrapper", e)
-		}
-		actual, e := Fingerprint(got)
-		if e != nil || !bytes.Equal(actual, fp) {
-			t.Fatal("recognition changed")
-		}
-	}
-	other, _ := Fingerprint(bytes.Repeat([]byte{0x20}, 32))
-	if bytes.Equal(fp, other) {
-		t.Fatal("independent roots")
-	}
-	if _, e := Fingerprint(nil); e == nil {
-		t.Fatal("root width")
+	if _, e := VaultID(nil); e == nil {
+		t.Fatal("invalid width")
 	}
 }

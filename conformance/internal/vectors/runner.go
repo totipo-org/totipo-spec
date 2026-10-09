@@ -112,7 +112,7 @@ func Read(root string) (Manifest, []Case, error) {
 	if e = Decode(b, &m); e != nil {
 		return m, nil, e
 	}
-	if m.Format != "totipo-vector-manifest-v1" || m.Protocol != "totipo-v1" || m.Revision != "r18" || len(m.Cases) == 0 {
+	if m.Format != "totipo-vector-manifest-v1" || m.Protocol != "totipo-v1" || m.Revision != "r19" || len(m.Cases) == 0 {
 		return m, nil, fmt.Errorf("invalid manifest header or empty corpus")
 	}
 	seen, paths := map[string]bool{}, map[string]bool{}
@@ -198,7 +198,7 @@ func VerifyProfile(root string, m Manifest) error {
 	if e = Decode(b, &p); e != nil {
 		return e
 	}
-	if p.Format != "totipo-requirements-v1" || p.Status != "moving-pre-rc" || p.Protocol != "totipo-v1" || p.Revision != "r18" {
+	if p.Format != "totipo-requirements-v1" || p.Status != "moving-pre-rc" || p.Protocol != "totipo-v1" || p.Revision != "r19" {
 		return fmt.Errorf("invalid moving profile")
 	}
 	for file, want := range map[string]string{"vectors/manifest.json": p.ManifestSHA256, "spec/totipo-vault-format-v1.md": p.SpecSHA256, "vectors/manifest.schema.json": p.SchemaSHA256, "vectors/case.schema.json": p.CaseSchemaSHA256} {
@@ -395,24 +395,33 @@ func Run(c Case) error {
 		if e != nil {
 			return e
 		}
-		base, e := unhex(w.Base)
+		vault, e := unhex(w.Vault)
 		if e != nil {
 			return e
 		}
+		store := storage.Store{Vault: bytes.Clone(vault)}
 		var result string
 		switch w.Action {
 		case "publish":
 			var after []byte
-			after, result = storage.Install(existing, intended, w.Kind, w.Durable)
+			after, result = store.Publish(existing, intended, w.Kind, w.Durable)
 			if result != "PUBLISHED_NEW" && !bytes.Equal(after, existing) {
 				return fmt.Errorf("existing mutated")
 			}
 		case "create":
-			result = storage.Create(w.Kind, w.Complete, w.Durable)
-		case "replace":
-			result = storage.Replace(base, existing, w.Kind, w.Readable, w.Complete, w.Durable)
+			var after []byte
+			after, result = storage.Create(existing, intended, w.Kind, w.Complete, w.Durable, w.Readable, w.OrphanObjects)
+			if result != "CREATED" && !bytes.Equal(after, existing) {
+				return fmt.Errorf("existing VAULT mutated")
+			}
+			if result == "CREATED" && !bytes.Equal(after, intended) {
+				return fmt.Errorf("creation bytes")
+			}
 		default:
 			return fmt.Errorf("unknown workflow")
+		}
+		if !bytes.Equal(store.Vault, vault) {
+			return fmt.Errorf("object publication mutated VAULT")
 		}
 		if result != w.Result {
 			return fmt.Errorf("workflow: %s != %s", result, w.Result)
@@ -519,15 +528,46 @@ func runBootstrap(c Case) error {
 	if e != nil {
 		return e
 	}
-	fp, _ := cryptov1.Fingerprint(root)
+	vid, e := cryptov1.VaultID(record)
+	if e != nil {
+		return e
+	}
 	for _, check := range []struct {
 		name, want string
 		got        []byte
-	}{{"wrap key", x.WrapKey, key}, {"header", x.Header, record[:39]}, {"fingerprint", x.Fingerprint, fp}} {
+	}{{"wrap key", x.WrapKey, key}, {"header", x.Header, record[:39]}, {"vault ID", x.VaultID, vid}} {
 		if e := equalHex(check.name, check.want, check.got); e != nil {
 			return e
 		}
 	}
+	if x.ChangedRecord != "" || x.ChangedVaultID != "" {
+		altered, e := unhex(x.ChangedRecord)
+		if e != nil || len(altered) != len(record) {
+			return fmt.Errorf("changed record width")
+		}
+		changedBits := 0
+		for i := range record {
+			for mask := byte(1); mask != 0; mask <<= 1 {
+				if (record[i]^altered[i])&mask != 0 {
+					changedBits++
+				}
+			}
+		}
+		if changedBits != 1 {
+			return fmt.Errorf("expected one-bit representation change")
+		}
+		alteredID, e := cryptov1.VaultID(altered)
+		if e != nil || bytes.Equal(vid, alteredID) {
+			return fmt.Errorf("changed vault identity: %v", e)
+		}
+		if e := equalHex("changed vault ID", x.ChangedVaultID, alteredID); e != nil {
+			return e
+		}
+		if _, e := cryptov1.Unwrap(password, altered); e == nil {
+			return fmt.Errorf("changed tag authenticated")
+		}
+	}
+
 	return nil
 }
 func runTOTP(c Case) error {

@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
 	"totipo/conformance/internal/cryptov1"
+	"totipo/conformance/internal/object"
 )
 
 func TestNeverReadIgnoredEntries(t *testing.T) {
@@ -62,7 +64,7 @@ func TestIncompleteScanPreservesAcceptedObservations(t *testing.T) {
 	}
 }
 
-func TestPublicationRetriesAndReplacement(t *testing.T) {
+func TestPublicationRetries(t *testing.T) {
 	intended := make([]byte, 1024)
 	intended[0] = 1
 	// An error can still have installed the bytes. The next ordinary observation
@@ -82,12 +84,7 @@ func TestPublicationRetriesAndReplacement(t *testing.T) {
 	if out != "FAILED" || after[0] != 2 {
 		t.Fatal("overwrote different")
 	}
-	if Replace([]byte{1}, []byte{2}, "regular", true, true, true) != "STALE" {
-		t.Fatal("stale replaced")
-	}
-	if Replace([]byte{1}, []byte{1}, "regular", false, true, true) != "FAILED" {
-		t.Fatal("no comparison")
-	}
+
 }
 
 func TestCanonicalEntryTypes(t *testing.T) {
@@ -97,9 +94,7 @@ func TestCanonicalEntryTypes(t *testing.T) {
 		if _, e := OpenBootstrap(Entry{Path: "vault", Kind: kind, Read: never}, nil); e == nil {
 			t.Fatal("bootstrap type", kind)
 		}
-		if Replace([]byte{1}, []byte{1}, kind, true, true, true) != "FAILED" {
-			t.Fatal("replacement type", kind)
-		}
+
 	}
 	for _, path := range []string{"VAULT", "Vault", "vault.tmp", "vault/conflict", "other/vault"} {
 		if _, e := OpenBootstrap(Entry{Path: path, Kind: "regular", Read: never}, nil); e == nil {
@@ -123,5 +118,63 @@ func TestCanonicalEntryTypes(t *testing.T) {
 	}
 	if obs, e := Scan("missing", entries, k); e != nil || len(obs) != 0 {
 		t.Fatal("missing namespace", e)
+	}
+}
+
+// Exercise real TOKEN authorship and retries against a separately held canonical
+// VAULT, including failures and successful observation/unlock afterward.
+func TestTokenAuthorshipPreservesCanonicalVault(t *testing.T) {
+	root := bytes.Repeat([]byte{0x37}, 32)
+	password := []byte("creation password")
+	record, err := cryptov1.Wrap(password, root, bytes.Repeat([]byte{0x23}, 16), bytes.Repeat([]byte{0x45}, 12))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := bytes.Clone(record)
+	canonical, result := Create(nil, record, "absent", true, true, true, false)
+	if result != "CREATED" {
+		t.Fatal(result)
+	}
+	store := Store{Vault: canonical}
+	keys, err := cryptov1.Derive(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := object.Object{Identity: bytes.Repeat([]byte{0x56}, 32), Parents: [][]byte{}, Status: 1, Algorithm: 1, Digits: 6, Period: 30, Secret: []byte("12345678901234567890")}
+	plain, err := token.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, encrypted, err := keys.Seal(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, result := store.Publish(nil, encrypted, "absent", true)
+	if result != "PUBLISHED_NEW" {
+		t.Fatal(result)
+	}
+	if _, err := keys.Open(id, published); err != nil {
+		t.Fatal(err)
+	}
+	for _, trial := range []struct {
+		kind     string
+		existing []byte
+		durable  bool
+		result   string
+	}{
+		{"regular", published, false, "ALREADY_PRESENT_EXACT"},
+		{"regular", []byte{0}, true, "FAILED"},
+		{"absent", nil, false, "FAILED"},
+	} {
+		if _, got := store.Publish(trial.existing, encrypted, trial.kind, trial.durable); got != trial.result {
+			t.Fatal(got)
+		}
+		if !bytes.Equal(before, store.Vault) {
+			t.Fatal("VAULT changed during ordinary authorship/publication")
+		}
+	}
+	unlocked, err := cryptov1.Unwrap(password, store.Vault)
+	if err != nil || !bytes.Equal(unlocked, root) {
+		t.Fatal("root changed", err)
 	}
 }

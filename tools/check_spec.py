@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structural and semantic anchors for the current r18 specification.
+"""Structural and semantic anchors for the current r19 specification.
 
 Historical revision entries are deliberately excluded from retired-term checks.
 Wire correctness is exercised by the conformance corpus, not prose fingerprints.
@@ -12,10 +12,10 @@ import re
 s = Path('spec/totipo-vault-format-v1.md').read_text(encoding='utf-8')
 norm, history = s.split('## 21. Revision history', 1)
 assert [int(n) for n in re.findall(r'^## (\d+)\.', s, re.M)] == list(range(1, 22))
-assert '**Revision:** r18' in norm and '**Protocol version:** 1' in norm
+assert '**Revision:** r19' in norm and '**Protocol version:** 1' in norm
 archive = Path('review/V1_PRE_R16_REVISION_HISTORY.md').read_text(encoding='utf-8')
 assert '../review/V1_PRE_R16_REVISION_HISTORY.md' in history
-for n in range(1, 19):
+for n in range(1, 20):
     assert f'### v1/r{n}\n' in (archive if n < 16 else history)
 for term in ('DEVICE', 'DEVICE_ID', 'P-256', 'ECDSA', 'DER', 'SIGNATURE',
              'AUTHOR_DEVICE_ID', 'AUTHOR_TIME', 'PROVENANCE', 'OPAQUE_ROUTABLE',
@@ -27,9 +27,9 @@ assert 'provenance' not in norm.lower()
 assert 'opaque' not in norm.lower()
 for anchor in ('TOKEN is the sole semantic object grammar', 'MAX_PARENTS = 4',
                '0 <= PARENT_COUNT <= 4', '1005', '1006', '1024',
-               'VAULT_FINGERPRINT', 'totipo/v1/vault-fingerprint',
+               'VAULT_ID = SHA-256(exact canonical VAULT representation)',
                'A ≡c B iff A reaches B and B reaches A',
-               'CURRENT != BASE', 'Synchronization is\noptional and external',
+               'Totipo v1 protocol state is create-only after vault initialization', 'Synchronization is\noptional and external',
                'MUST NOT require exhaustive enumeration',
                'Parent availability is not a publication prerequisite'):
     assert anchor in norm, anchor
@@ -81,15 +81,27 @@ password = section_text(5)
 assert 'interactive application MUST require explicit confirmation' in password
 assert 'before creating a vault with an empty password' in password
 creation = section_text(7)
-for anchor in ('during available observation', 'application observes',
-               'SHOULD prominently warn', 'SHOULD require explicit user confirmation',
-               'SHOULD recommend checking synchronization and provider state',
-               'MUST NOT require exhaustive enumeration',
-               'MUST NOT by itself make fresh creation impossible',
-               'unauthenticated contextual evidence'):
+for anchor in ('ordinary vault creation MUST NOT silently initialize',
+               'MUST require an explicit recovery, reconfiguration, or new-location workflow',
+               'MUST NOT be classified as garbage', 'Creation MUST NOT delete them',
+               'Reopen canonical `vault` as a regular file', 'NO-REPLACE',
+               'Report success only after all required publication, persistence, and revalidation work succeeds'):
     assert anchor in creation, anchor
 assert re.search(r'MUST NOT describe tombstoning or deleting a token as securely erasing', section_text(16))
-assert re.search(r'MUST NOT describe password rewrap as a complete security reset or as recovery from suspected K_root compromise', section_text(8))
+changes = section_text(8)
+assert 'v1 has no in-place password change and defines no password-rewrap operation' in changes
+assert 'Reusing K_root for migration is forbidden' in changes
+assert 'INFORMATIVE' in changes
+assert 'may omit not-yet- synchronized data' in changes
+for retired in ('VAULT_FINGERPRINT', 'totipo/v1/vault-fingerprint', 'CURRENT != BASE',
+                'stageReplacement', 'compare-before-replace', 'latest password wrapper'):
+    assert retired not in norm, retired
+root = section_text(6)
+for anchor in ('K_root = CSPRNG(32 bytes)', 'immutable for the complete lifetime',
+               'MUST NOT be rotated in-place', 'BOOTSTRAP_VERSION = 0x01',
+               'NEVER a newer version', 'same-root alternate legitimate bootstrap representations'):
+    assert anchor in root, anchor
+assert 'MUST NOT replace it, even if it is exact-identical' in creation
 scopes = section_text(20)
 for scope in ('Core protocol', 'Store/writer', 'Application'):
     assert f'| {scope} |' in scopes
@@ -116,4 +128,4 @@ for field, artifact in (
             f'FAIL: requirements/v1-pre-rc.json {field} mismatch for {artifact}: '
             f'profile={profile.get(field)!r}, actual={actual}; '
             'regenerate with go run ./conformance/cmd/generate-vectors -root .')
-print('PASS: Totipo v1/r18 structural checks and profile artifact hashes')
+print('PASS: Totipo v1/r19 structural checks and profile artifact hashes')

@@ -3,7 +3,7 @@
 Totipo is an encrypted, append-only TOTP vault format operating on a configured
 durable store. Synchronization is optional and external.
 
-The current normative specification is **v1/r18**, a design draft with moving
+The current normative specification is **v1/r19**, a design draft with moving
 pre-release-candidate conformance evidence:
 [Totipo Vault Format v1](spec/totipo-vault-format-v1.md).
 
@@ -18,7 +18,9 @@ computation regardless of lifecycle or historical status.
 A store contains canonical regular-file `vault` and directory `objects-v1/`. Only exact v1 TOKENs
 contribute semantic state. Unknown sibling families are outside v1 interpretation;
 future families define their own compatibility relationships. The vault root
-provides authoring authority. VAULT_FINGERPRINT provides optional stable recognition.
+provides authoring authority. VAULT_ID (SHA-256 of exact VAULT bytes) provides optional stable recognition.
+VAULT is an immutable create-once bootstrap; object history is immutable. Credential,
+KDF-policy, or root changes require migration to a fresh independent vault.
 No per-client persistent graph database is required. Store loss or rollback can
 lose history. Totipo validates and authenticates observed content, but does not
 cryptographically guarantee a complete or freshest store view. Stronger freshness,
@@ -49,6 +51,8 @@ case hashes, physical case coverage, and exact requirements pins. Normal checks
 never regenerate fixtures. Make uses a writable Go cache under `.direnv/`.
 See the [case contract](vectors/FORMAT.md) and [Go consumer](conformance/README.md).
 
+The [r19 immutable-VAULT report](review/V1_R19_IMMUTABLE_VAULT_REPORT.md) records
+the create-only model, unchanged wire bytes, and adjusted conformance.
 The [r18 hardening report](review/V1_R18_HARDENING_REPORT.md) records application
 safety, conformance scopes, editorial cleanup, and the unchanged portable corpus.
 The [r17 clarification report](review/V1_R17_HARDENING_REPORT.md) records the

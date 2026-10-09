@@ -1,4 +1,4 @@
-# v1/r18 conformance vectors
+# v1/r19 conformance vectors
 
 The [manifest](manifest.json) lists the complete current corpus, with exact paths,
 SHA-256 hashes, kinds, expected outcomes, and specification sections. Every case
@@ -10,7 +10,7 @@ The [case contract](FORMAT.md) describes byte encoding and model boundaries.
 
 Coverage includes canonical TOKEN grammar, client metadata, the maximum 1005-byte
 TOKEN, deterministic 1024-byte encryption, authenticated invalid length/padding and keyed-ID
-mismatch rejection, root wrapping and fingerprint stability,
+mismatch rejection, root wrapping, immutable VAULT creation, and stable VAULT_ID recognition,
 RFC TOTP answers, SCC/current heads, missing ancestry, fixed folds, discovery
 diagnostics, publication, and VAULT workflows. Abstract graph cycles and same-ID
 failure cases do not pretend to be constructible cryptographic collisions.
