@@ -10,7 +10,19 @@ expectations merely to make a failing consumer pass. Preserve historical reports
 and checkpoints. Pre-RC case IDs may be removed or replaced when their concepts
 are removed; document every delta.
 
-Before proposing changes, run:
+The agent does not run Nix. The human normal qualification gate is exactly:
+
+```sh
+nix flake check path:.
+```
+
+On Linux it runs the complete pinned spec/conformance suite, including formatting,
+vet, race, and bounded fuzzing. Linux CI uses the same gate; supplemental
+macOS/Windows and Linux Go 1.23 jobs provide portability evidence. No additional
+`nix build` is required. Full Nix qualification checks are Linux-only; Darwin
+shells remain available for development.
+
+Direct local development commands remain useful:
 
 ```sh
 gofmt -l conformance

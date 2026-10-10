@@ -36,8 +36,20 @@ storage environment or application; synchronization remains optional.
 | `review/` | Historical decisions and review evidence |
 | `tools/` | Structural and schema checks |
 
+Normal repository qualification uses the pinned Nix environment:
+
+```sh
+nix flake check path:.
+```
+
+On Linux this runs formatting, structural/schema and integrity checks, Python
+unit tests, all Go tests and manifest conformance cases, vet, race tests, and the
+three bounded fuzz targets. Linux CI uses this authoritative gate. Supplemental
+macOS/Windows jobs and Linux Go 1.23 checks provide portability evidence.
+There is no application package or additional build command.
+
 Use `nix develop` or the existing direnv setup when available. Go 1.23+ and Python
-3.9+ are supported. Run:
+3.9+ are supported for direct local development checks:
 
 ```sh
 make check
@@ -48,7 +60,12 @@ go -C conformance vet ./...
 
 `make conformance` executes every manifest case. `make verify` checks schemas,
 case hashes, physical case coverage, and exact requirements pins. Normal checks
-never regenerate fixtures. Make uses a writable Go cache under `.direnv/`.
+never regenerate fixtures. Explicit generator maintenance remains separate.
+Make defaults to a writable Go cache under `.direnv/` and honors caller-provided
+`GOCACHE`; Nix qualification uses temporary caches and fixed vendored Go inputs,
+with Go proxy and checksum-service access disabled. Python tools use only the
+standard library. Darwin development shells remain available; full Nix
+qualification checks are Linux-only.
 See the [case contract](vectors/FORMAT.md) and [Go consumer](conformance/README.md).
 
 The [r19 immutable-VAULT report](review/V1_R19_IMMUTABLE_VAULT_REPORT.md) records
