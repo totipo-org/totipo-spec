@@ -36,7 +36,8 @@ storage environment or application; synchronization remains optional.
 | `review/` | Historical decisions and review evidence |
 | `tools/` | Structural and schema checks |
 
-Normal repository qualification uses the pinned Nix environment:
+The final routine repository qualification gate uses the pinned Nix environment
+after its source inputs are frozen (human execution; agents do not run Nix):
 
 ```sh
 nix flake check path:.
@@ -49,14 +50,25 @@ macOS/Windows jobs and Linux Go 1.23 checks provide portability evidence.
 There is no application package or additional build command.
 
 Use `nix develop` or the existing direnv setup when available. Go 1.23+ and Python
-3.9+ are supported for direct local development checks:
+3.9+ are supported for direct local development. Follow the
+[interactive qualification ladder](AGENTS.md): one baseline `make check` for
+semantic/conformance work, focused checks while editing, then one complete host
+suite when inputs stabilize:
 
 ```sh
 make check
+go -C conformance vet ./...
 make race
 make fuzz
-go -C conformance vet ./...
+git diff --check
 ```
+
+Docs/process-only milestones use protected-byte invariance and applicable static
+checks rather than automatic race/fuzz runs. Inspect the flake source filter and
+structure dependencies before deciding whether a docs edit requires human Nix.
+Record milestone classifications and execution counts in substantial reports.
+Optimization must come from staging expensive checks at boundaries,
+never from deleting final conformance/race/fuzz coverage.
 
 `make conformance` executes every manifest case. `make verify` checks schemas,
 case hashes, physical case coverage, and exact requirements pins. Normal checks
