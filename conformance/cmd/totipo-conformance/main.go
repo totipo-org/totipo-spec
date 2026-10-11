@@ -24,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 	if *verify {
-		fmt.Printf("PASS: r19 manifest, profile and %d case files verified\n", len(cases))
+		fmt.Printf("PASS: %s manifest, profile and %d case files verified\n", vectors.ExpectedRevision, len(cases))
 		return
 	}
 	failures := 0
@@ -37,5 +37,5 @@ func main() {
 	if failures > 0 {
 		os.Exit(1)
 	}
-	fmt.Printf("PASS: v1/r19 moving-pre-rc: %d cases\n", len(cases))
+	fmt.Printf("PASS: v1/%s moving-pre-rc: %d cases\n", vectors.ExpectedRevision, len(cases))
 }

@@ -8,6 +8,14 @@ protocol and modeled store-operation evidence under the specification’s Sectio
 scopes. Passing them does not establish application conformance or live backend
 crash durability.
 
+Read-only integrity belongs to `vectors.Read` and `vectors.VerifyProfile`: exact
+revision, raw artifact/case hashes, physical corpus coverage, and the exact
+manifest/profile required set. `make spec-check` checks prose structure/history;
+`make verify` combines Python schema validation with Go integrity verification.
+The schemas remain the presence/type contract, including required false and zero
+values; Go strict decoding and `ValidateShape` protect direct consumer inputs.
+Verification never updates pins or derives expected outcomes from evaluation.
+
 Packages separate TLV framing, exact TOKEN grammar, object/root cryptography,
 TOTP computation, causal-equivalence graph evaluation, and storage outcomes.
 Storage bytes pass physical-size, AEAD, semantic-length, zero-padding, and keyed-ID

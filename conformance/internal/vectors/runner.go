@@ -20,6 +20,9 @@ import (
 	"totipo/conformance/internal/totp"
 )
 
+// ExpectedRevision is a verifier expectation, independent of generator output.
+const ExpectedRevision = "r19"
+
 // JSON objects have unique member names at every depth; rejecting duplicates
 // avoids consumer-dependent interpretations before decoding typed payloads.
 func uniqueJSON(p []byte) error {
@@ -112,7 +115,7 @@ func Read(root string) (Manifest, []Case, error) {
 	if e = Decode(b, &m); e != nil {
 		return m, nil, e
 	}
-	if m.Format != "totipo-vector-manifest-v1" || m.Protocol != "totipo-v1" || m.Revision != "r19" || len(m.Cases) == 0 {
+	if m.Format != "totipo-vector-manifest-v1" || m.Protocol != "totipo-v1" || m.Revision != ExpectedRevision || len(m.Cases) == 0 {
 		return m, nil, fmt.Errorf("invalid manifest header or empty corpus")
 	}
 	seen, paths := map[string]bool{}, map[string]bool{}
@@ -198,7 +201,7 @@ func VerifyProfile(root string, m Manifest) error {
 	if e = Decode(b, &p); e != nil {
 		return e
 	}
-	if p.Format != "totipo-requirements-v1" || p.Status != "moving-pre-rc" || p.Protocol != "totipo-v1" || p.Revision != "r19" {
+	if p.Format != "totipo-requirements-v1" || p.Status != "moving-pre-rc" || p.Protocol != "totipo-v1" || p.Revision != ExpectedRevision {
 		return fmt.Errorf("invalid moving profile")
 	}
 	for file, want := range map[string]string{"vectors/manifest.json": p.ManifestSHA256, "spec/totipo-vault-format-v1.md": p.SpecSHA256, "vectors/manifest.schema.json": p.SchemaSHA256, "vectors/case.schema.json": p.CaseSchemaSHA256} {

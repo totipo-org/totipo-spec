@@ -27,12 +27,25 @@ func TestCorpus(t *testing.T) {
 }
 func TestStrictDecode(t *testing.T) {
 	var c Case
-	for _, s := range []string{`{"unknown":1}`, `{} {}`, `{"id":"a","id":"b"}`, `{"graph":{"steps":[],"steps":[]}}`} {
+	for _, s := range []string{`{"unknown":1}`, `{} {}`, `{"id":"a","id":"b"}`, `{"graph":{"steps":[],"steps":[]}}`,
+		`{"graph":{"steps":[{"expect":{"typo":false}}]}}`,
+		`{"input":{"client_time":18446744073709551616}}`,
+		`{"input":{"client_time":-1}}`, `{"input":{"client_time":1.5}}`,
+		`{"input":{"client_time":true}}`} {
 		if Decode([]byte(s), &c) == nil {
 			t.Fatal("accepted", s)
 		}
 	}
 }
+func TestUnsignedTimestampDecode(t *testing.T) {
+	for _, raw := range []string{`{"input":{"client_time":0}}`, `{"input":{"client_time":18446744073709551615}}`} {
+		var c Case
+		if err := Decode([]byte(raw), &c); err != nil || c.Input.ClientTime == nil {
+			t.Fatal("explicit u64 value rejected", raw, err)
+		}
+	}
+}
+
 func TestManifestTampering(t *testing.T) {
 	root := t.TempDir()
 	if e := os.CopyFS(filepath.Join(root, "vectors"), os.DirFS("../../../vectors")); e != nil {

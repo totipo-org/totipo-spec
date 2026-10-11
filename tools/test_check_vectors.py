@@ -81,6 +81,28 @@ class SchemaContractTests(unittest.TestCase):
         with self.assertRaises(Invalid):
             validate(c, self.schema)
 
+    def test_workflow_boolean_presence(self):
+        c = read(BASE / 'cases/vault/v1.vault.create-existing.001.json')
+        validate(c, self.schema)
+        for field in ('readable', 'complete', 'durable', 'orphan_objects',
+                      'parents_available'):
+            changed = copy.deepcopy(c)
+            changed['workflow'][field] = False
+            validate(changed, self.schema)
+            del changed['workflow'][field]
+            with self.subTest(field=field), self.assertRaises(Invalid):
+                validate(changed, self.schema)
+
+    def test_required_zero_and_operation_fields(self):
+        c = read(BASE / 'cases/totp/v1.totp.rfc6238-sha1.001.json')
+        validate(c, self.schema)
+        self.assertEqual(c['totp']['t0'], 0)
+        for field in ('t0', 'rows', 'period'):
+            changed = copy.deepcopy(c)
+            del changed['totp'][field]
+            with self.subTest(field=field), self.assertRaises(Invalid):
+                validate(changed, self.schema)
+
     def test_duplicate_members(self):
         with self.assertRaises(Invalid):
             json.loads('{"id": 1, "id": 2}', object_pairs_hook=pairs)
