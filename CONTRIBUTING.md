@@ -51,6 +51,31 @@ checks. Report-only edits outside qualification inputs do not invalidate results
 Optimization must come from staging expensive checks at boundaries,
 never from deleting final conformance/race/fuzz coverage.
 
+Historical one-off audit programs are reproduced from the historical Git revision
+that contains them. Current main need not retain executable migration tools after
+their migration responsibility has ended. Use a separate clean historical checkout
+with repository history available, rather than running an old script against the
+current corpus:
+
+| Audit | Historical checkout revision | Command from that checkout |
+| --- | --- | --- |
+| r14 → r15 | `5ff6977ae004a9c03a410b38f0f9d73ca2bc76d4` | `python3 tools/audit_r15.py` |
+| r15 → r16 | `54f38d13d62dc811c98489eb1867d63a9bef235a` | `python3 tools/audit_r16.py` |
+
+For example, `git worktree add --detach /tmp/totipo-r15-audit
+5ff6977ae004a9c03a410b38f0f9d73ca2bc76d4` creates the r15 checkout; run its
+command from that directory. Use the r16 revision and a different directory for
+r16. The scripts read their historical worktree and fixed baseline Git objects
+(`0b63f77886f95cf9bab3ceb9cbb0916177fe3589` and
+`0a01fc1f0493ec1fefc0c4b89f8b22490d586852`, respectively). The r15 legacy-reference
+inventory also reflects files present in that checkout. This retrieval convention
+relies on normal repository history retention, not an external archival guarantee.
+The original [r15 report](review/V1_R15_STATE_MODEL_SIMPLIFICATION_REPORT.md),
+[r15 audit JSON](review/V1_R15_CASE_AUDIT.json),
+[r16 report](review/V1_R16_REWRITE_REPORT.md), and
+[r16 audit JSON](review/V1_R16_CASE_AUDIT.json) remain historical evidence;
+their original relative source links and commands refer to their historical tree.
+
 Use the preserved Nix environment when available. See [FORMAT.md](vectors/FORMAT.md)
 for deliberate fixture maintenance. Every physical case must be manifest-listed
 exactly once and required by the moving profile. Abstract graph/storage cases must
