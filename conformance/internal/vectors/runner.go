@@ -106,6 +106,24 @@ func equalHex(label, s string, p []byte) error {
 var idPattern = regexp.MustCompile(`^v1\.[a-z0-9-]+(?:\.[a-z0-9-]+)+$`)
 var hashPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+// resolvedPath puts roots and candidates in the same absolute filesystem namespace.
+func resolvedPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(absolute)
+}
+
+// containedPath compares resolved absolute paths using host volume/separator rules.
+func containedPath(base, candidate string) bool {
+	if !filepath.IsAbs(base) || !filepath.IsAbs(candidate) {
+		return false
+	}
+	rel, err := filepath.Rel(base, candidate)
+	return err == nil && filepath.IsLocal(rel)
+}
+
 func Read(root string) (Manifest, []Case, error) {
 	var m Manifest
 	b, e := os.ReadFile(filepath.Join(root, "vectors/manifest.json"))
@@ -117,6 +135,10 @@ func Read(root string) (Manifest, []Case, error) {
 	}
 	if m.Format != "totipo-vector-manifest-v1" || m.Protocol != "totipo-v1" || m.Revision != ExpectedRevision || len(m.Cases) == 0 {
 		return m, nil, fmt.Errorf("invalid manifest header or empty corpus")
+	}
+	base, e := resolvedPath(filepath.Join(root, "vectors"))
+	if e != nil {
+		return m, nil, e
 	}
 	seen, paths := map[string]bool{}, map[string]bool{}
 	cases := []Case{}
@@ -139,14 +161,11 @@ func Read(root string) (Manifest, []Case, error) {
 			return m, nil, fmt.Errorf("unsafe case path")
 		}
 		full := filepath.Join(root, "vectors", entry.Path)
-		resolved, e := filepath.EvalSymlinks(full)
+		resolved, e := resolvedPath(full)
 		if e != nil {
 			return m, nil, e
 		}
-		base, _ := filepath.Abs(filepath.Join(root, "vectors"))
-		resolved, _ = filepath.Abs(resolved)
-		rel, e := filepath.Rel(base, resolved)
-		if e != nil || !filepath.IsLocal(rel) {
+		if !containedPath(base, resolved) {
 			return m, nil, fmt.Errorf("case symlink escapes vectors")
 		}
 		b, e := os.ReadFile(full)
