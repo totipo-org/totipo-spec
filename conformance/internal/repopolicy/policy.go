@@ -91,6 +91,11 @@ func Source(root string) error {
 			if err != nil {
 				return err
 			}
+			specCommand := within(filepath.Join(root, "conformance/cmd/check-spec"), path)
+			specPolicy := within(filepath.Join(root, "conformance/internal/specpolicy"), path)
+			if (specCommand || specPolicy) && (strings.HasPrefix(name, "totipo/") || strings.Contains(strings.Split(name, "/")[0], ".")) && !(specCommand && name == "totipo/conformance/internal/specpolicy") {
+				return fmt.Errorf("spec checker dependency requires review: %s in %s", name, path)
+			}
 			own := "totipo/" + role
 			if strings.HasPrefix(name, "totipo/") && name != own && !strings.HasPrefix(name, own+"/") {
 				return fmt.Errorf("cross-role/repository import %s in %s", name, path)

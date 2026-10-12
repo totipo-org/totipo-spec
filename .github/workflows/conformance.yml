@@ -44,10 +44,10 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache-dependency-path: conformance/go.sum
-      - name: Spec structure
+      - name: Spec policy, schemas, and independent wire oracle
         run: |
-          python3 tools/check_spec.py
-          python3 tools/check_vectors.py
+          go run ./conformance/cmd/check-spec -root .
+          go run ./conformance/cmd/totipo-conformance -root . -verify-only
           python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Formatting
         shell: bash

@@ -115,3 +115,16 @@ authored graph/storage expectations from verifier results.
 
 The older generator path in the unchanged `vectors/FORMAT.md` is superseded by
 `make generate` (or `go run ./generator/cmd/generate-vectors -root .`).
+
+Spec/prose policy now runs in Go via `make spec-check` (optional direct command:
+`go run ./conformance/cmd/check-spec -root .`). It requires only the active spec
+and archived pre-r16 history. `vectors.Read` validates duplicate-safe JSON against
+both independently authored checked-in schemas before strict typed acceptance;
+required fields are checked by exact member presence rather than Go zero values.
+Schema keyword or pattern extensions require explicit support and parity review.
+
+Python discovery now runs only the three independent wire-oracle tests. Keep
+`tools/test_r16_vectors.py` and its unchanged `tools/check_vectors.py` reader
+support until W3C; the Python schema CLI is no longer authoritative in normal
+qualification. Normal checks still do not execute the generator, and W3A's
+independent implementation boundary remains active.

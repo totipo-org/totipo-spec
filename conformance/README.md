@@ -11,7 +11,7 @@ crash durability.
 Read-only integrity belongs to `vectors.Read` and `vectors.VerifyProfile`: exact
 revision, raw artifact/case hashes, physical corpus coverage, and the exact
 manifest/profile required set. `make spec-check` checks prose structure/history;
-`make verify` combines Python schema validation with Go integrity verification.
+`make verify` runs schema-aware Go artifact and integrity verification.
 The schemas remain the presence/type contract, including required false and zero
 values; Go strict decoding and `ValidateShape` protect direct consumer inputs.
 Verification never updates pins or derives expected outcomes from evaluation.
@@ -55,3 +55,19 @@ are specified explicitly, not queried from the evaluator. Review the diff and
 pins; independent interoperability remains necessary before RC freeze.
 See the [case contract](../vectors/FORMAT.md) and
 [r16 rewrite report](../review/V1_R16_REWRITE_REPORT.md).
+
+The verifier-owned stdlib `internal/schema` interpreter validates the checked-in
+manifest and case contracts before strict typed decoding in `vectors.Read`.
+It detects duplicates at every depth, keeps integer tokens exact, counts Unicode
+code points for schema string lengths, and checks required member presence
+independently of Go zero values. Unsupported schema keywords or patterns fail
+closed. Existing shape, hash, path/inventory, profile, and semantic checks remain.
+Verify-only performs artifact verification and skips semantic execution; full
+conformance executes semantics afterward.
+
+The separate `cmd/check-spec` / `internal/specpolicy` command reads only the active
+spec and archived history. The architecture guard keeps this policy independent
+of semantic packages. The independent Python wire oracle remains active until
+W3C and still imports only the local duplicate-safe reader from the retained,
+unchanged `tools/check_vectors.py`; normal schema acceptance is now Go-owned.
+Generator/verifier isolation from W3A is unchanged.

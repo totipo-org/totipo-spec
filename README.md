@@ -35,7 +35,7 @@ storage environment or application; synchronization remains optional.
 | `conformance/` | Go reference consumer and architecture guard |
 | `generator/` | Independent deliberate fixture writer |
 | `review/` | Historical decisions and review evidence |
-| `tools/` | Structural and schema checks |
+| `tools/` | Independent Python wire oracle and temporary reader support |
 
 The final routine repository qualification gate uses the pinned Nix environment
 after its source inputs are frozen (human execution; agents do not run Nix):
@@ -50,8 +50,8 @@ new intended milestone files must first be Git-known via intent-to-add. See the
 intentional raw/non-Git path exceptions. Keep local caches and secrets outside
 Git source membership.
 
-On Linux this runs formatting, structural/schema and integrity checks, Python
-unit tests, all Go tests and manifest conformance cases, vet, race tests, and the
+On Linux this runs formatting, structural/schema and integrity checks, independent Python
+wire-oracle tests, all Go tests and manifest conformance cases, vet, race tests, and the
 three bounded fuzz targets. Linux CI uses this authoritative gate. Supplemental
 macOS/Windows jobs and Linux Go 1.23 checks provide portability evidence.
 There is no application package or additional build command.
@@ -77,6 +77,18 @@ structure dependencies before deciding whether a docs edit requires human Nix.
 Record milestone classifications and execution counts in substantial reports.
 Optimization must come from staging expensive checks at boundaries,
 never from deleting final conformance/race/fuzz coverage.
+
+`make spec-check` runs the Go prose/history policy command, which reads only the
+active spec and archived pre-r16 history. The verifier interprets the checked-in
+JSON schemas before typed decoding: required fields mean exact member presence,
+including false, zero, empty strings, and empty arrays. The schemas are independent
+contracts rather than generated Go models.
+
+Python remains temporarily for the independent wire oracle in
+`tools/test_r16_vectors.py`, using the duplicate-safe `read` helper from the
+unchanged `tools/check_vectors.py`. The latter is no longer invoked as the normal
+schema checker. W3C owns this final Python island; W3A's generator/verifier
+boundary remains unchanged.
 
 `make conformance` executes every manifest case. `make verify` checks schemas,
 case hashes, physical case coverage, and exact requirements pins. Normal checks

@@ -8,10 +8,10 @@ export GOCACHE ?= $(CURDIR)/.direnv/go-build
 .NOTPARALLEL: check
 
 help:
-	@printf '%s\n' 'make spec-check  Check the v1/r19 specification structure' 'make test        Run Go tests' 'make conformance Run all v1/r19 requirements' 'make verify      Verify manifest, files, and moving profile' 'make check       Run all required checks' 'make race        Run Go race tests' 'make fuzz        Run bounded parser fuzzing' 'make architecture Enforce the two-module implementation boundary' 'make generate    Deliberately regenerate fixtures and pins'
+	@printf '%s\n' 'make spec-check  Check the v1/r19 specification structure' 'make test        Run Go tests and independent Python wire oracle' 'make conformance Run all v1/r19 requirements' 'make verify      Verify manifest, files, and moving profile' 'make check       Run all required checks' 'make race        Run Go race tests' 'make fuzz        Run bounded parser fuzzing' 'make architecture Enforce the two-module implementation boundary' 'make generate    Deliberately regenerate fixtures and pins'
 
 spec-check:
-	$(PYTHON) tools/check_spec.py
+	$(GO) run ./conformance/cmd/check-spec -root .
 
 test:
 	$(GO) -C generator test -count=1 ./...
@@ -31,7 +31,6 @@ conformance:
 	$(GO) run ./conformance/cmd/totipo-conformance -root .
 
 verify:
-	$(PYTHON) tools/check_vectors.py
 	$(GO) run ./conformance/cmd/totipo-conformance -root . -verify-only
 
 architecture:

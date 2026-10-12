@@ -17,7 +17,7 @@
         pkgs = import nixpkgs {
           inherit system;
         };
-        # Only qualification inputs; the archived history is read by check_spec.py.
+        # Only qualification inputs; the archived history is read by the Go check-spec policy command.
         qualificationSource = pkgs.lib.fileset.toSource {
           root = ./.;
           fileset = pkgs.lib.fileset.unions [

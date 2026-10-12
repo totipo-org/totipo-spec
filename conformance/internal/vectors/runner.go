@@ -16,6 +16,7 @@ import (
 	"totipo/conformance/internal/cryptov1"
 	"totipo/conformance/internal/graph"
 	"totipo/conformance/internal/object"
+	"totipo/conformance/internal/schema"
 	"totipo/conformance/internal/storage"
 	"totipo/conformance/internal/totp"
 )
@@ -23,54 +24,8 @@ import (
 // ExpectedRevision is a verifier expectation, independent of generator output.
 const ExpectedRevision = "r19"
 
-// JSON objects have unique member names at every depth; rejecting duplicates
-// avoids consumer-dependent interpretations before decoding typed payloads.
-func uniqueJSON(p []byte) error {
-	d := json.NewDecoder(bytes.NewReader(p))
-	d.UseNumber()
-	var walk func() error
-	walk = func() error {
-		t, e := d.Token()
-		if e != nil {
-			return e
-		}
-		delim, ok := t.(json.Delim)
-		if !ok {
-			return nil
-		}
-		switch delim {
-		case '{':
-			seen := map[string]bool{}
-			for d.More() {
-				key, e := d.Token()
-				if e != nil {
-					return e
-				}
-				s, ok := key.(string)
-				if !ok || seen[s] {
-					return fmt.Errorf("duplicate/invalid JSON member")
-				}
-				seen[s] = true
-				if e := walk(); e != nil {
-					return e
-				}
-			}
-		case '[':
-			for d.More() {
-				if e := walk(); e != nil {
-					return e
-				}
-			}
-		default:
-			return fmt.Errorf("unexpected delimiter")
-		}
-		_, e = d.Token()
-		return e
-	}
-	return walk()
-}
 func Decode(p []byte, v any) error {
-	if e := uniqueJSON(p); e != nil {
+	if _, e := schema.Parse(p); e != nil {
 		return e
 	}
 	d := json.NewDecoder(bytes.NewReader(p))
@@ -126,9 +81,31 @@ func containedPath(base, candidate string) bool {
 
 func Read(root string) (Manifest, []Case, error) {
 	var m Manifest
+	loadSchema := func(name string) (*schema.Schema, error) {
+		b, e := os.ReadFile(filepath.Join(root, "vectors", name))
+		if e != nil {
+			return nil, e
+		}
+		s, e := schema.Compile(b)
+		if e != nil {
+			return nil, fmt.Errorf("%s: %w", name, e)
+		}
+		return s, nil
+	}
+	manifestSchema, e := loadSchema("manifest.schema.json")
+	if e != nil {
+		return m, nil, e
+	}
+	caseSchema, e := loadSchema("case.schema.json")
+	if e != nil {
+		return m, nil, e
+	}
 	b, e := os.ReadFile(filepath.Join(root, "vectors/manifest.json"))
 	if e != nil {
 		return m, nil, e
+	}
+	if e = manifestSchema.ValidateBytes(b); e != nil {
+		return m, nil, fmt.Errorf("manifest schema: %w", e)
 	}
 	if e = Decode(b, &m); e != nil {
 		return m, nil, e
@@ -174,6 +151,9 @@ func Read(root string) (Manifest, []Case, error) {
 		}
 		if Hash(b) != entry.SHA256 {
 			return m, nil, fmt.Errorf("%s checksum mismatch", entry.ID)
+		}
+		if e = caseSchema.ValidateBytes(b); e != nil {
+			return m, nil, fmt.Errorf("%s case schema: %w", entry.ID, e)
 		}
 		var c Case
 		if e = Decode(b, &c); e != nil {

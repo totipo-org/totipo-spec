@@ -78,6 +78,9 @@ func TestDependencyDirVendor(t *testing.T) {
 
 func TestPolicyMutations(t *testing.T) {
 	for _, tt := range []struct{ name, path, body, want string }{
+		{"spec-command-semantic", "conformance/cmd/check-spec/a.go", "package main\nimport _ \"totipo/conformance/internal/vectors\"\n", "spec checker dependency"},
+		{"spec-policy-semantic", "conformance/internal/specpolicy/a.go", "package specpolicy\nimport _ \"totipo/conformance/internal/object\"\n", "spec checker dependency"},
+		{"spec-policy-command", "conformance/internal/specpolicy/a.go", "package specpolicy\nimport _ \"totipo/conformance/cmd/check-spec\"\n", "spec checker dependency"},
 		{"generator-import", "generator/a.go", "package generator\nimport _ \"totipo/conformance\"\n", "cross-role"},
 		{"verifier-import", "conformance/a.go", "package conformance\nimport _ \"totipo/generator\"\n", "cross-role"},
 		{"third-module", "third/go.mod", "module totipo/third\ngo 1.23.0\n", "third/root"},
