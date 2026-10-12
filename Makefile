@@ -1,5 +1,4 @@
 GO ?= go
-PYTHON ?= python3
 # Keep Go's build cache writable in the Nix jailed development environment.
 export GOCACHE ?= $(CURDIR)/.direnv/go-build
 
@@ -8,14 +7,13 @@ export GOCACHE ?= $(CURDIR)/.direnv/go-build
 .NOTPARALLEL: check
 
 help:
-	@printf '%s\n' 'make spec-check  Check the v1/r19 specification structure' 'make test        Run Go tests and independent Python wire oracle' 'make conformance Run all v1/r19 requirements' 'make verify      Verify manifest, files, and moving profile' 'make check       Run all required checks' 'make race        Run Go race tests' 'make fuzz        Run bounded parser fuzzing' 'make architecture Enforce the two-module implementation boundary' 'make generate    Deliberately regenerate fixtures and pins'
+	@printf '%s\n' 'make spec-check  Check the v1/r19 specification structure' 'make test        Run Go tests and independent wire oracle' 'make conformance Run all v1/r19 requirements' 'make verify      Verify manifest, files, and moving profile' 'make check       Run all required checks' 'make race        Run Go race tests' 'make fuzz        Run bounded parser fuzzing' 'make architecture Enforce the two-module implementation boundary' 'make generate    Deliberately regenerate fixtures and pins'
 
 spec-check:
 	$(GO) run ./conformance/cmd/check-spec -root .
 
 test:
 	$(GO) -C generator test -count=1 ./...
-	$(PYTHON) -m unittest discover -s tools -p 'test_*.py'
 	$(GO) -C conformance test -count=1 ./...
 
 race:

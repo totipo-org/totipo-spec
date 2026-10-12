@@ -105,6 +105,10 @@ func TestDependencyDirVendorAliasedRoot(t *testing.T) {
 
 func TestPolicyMutations(t *testing.T) {
 	for _, tt := range []struct{ name, path, body, want string }{
+		{"oracle-verifier", "conformance/internal/wireoracle/a_test.go", "package wireoracle\nimport _ \"totipo/conformance/internal/cryptov1\"\n", "wire oracle"},
+		{"oracle-schema", "conformance/internal/wireoracle/a_test.go", "package wireoracle\nimport _ \"totipo/conformance/internal/schema\"\n", "wire oracle"},
+		{"oracle-generator", "conformance/internal/wireoracle/a_test.go", "package wireoracle\nimport _ \"totipo/generator/internal/wire\"\n", "wire oracle"},
+		{"oracle-external", "conformance/internal/wireoracle/a_test.go", "package wireoracle\nimport _ \"golang.org/x/crypto/hkdf\"\n", "wire oracle"},
 		{"spec-command-semantic", "conformance/cmd/check-spec/a.go", "package main\nimport _ \"totipo/conformance/internal/vectors\"\n", "spec checker dependency"},
 		{"spec-policy-semantic", "conformance/internal/specpolicy/a.go", "package specpolicy\nimport _ \"totipo/conformance/internal/object\"\n", "spec checker dependency"},
 		{"spec-policy-command", "conformance/internal/specpolicy/a.go", "package specpolicy\nimport _ \"totipo/conformance/cmd/check-spec\"\n", "spec checker dependency"},

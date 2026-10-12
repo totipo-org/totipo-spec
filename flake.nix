@@ -30,7 +30,6 @@
               (file: builtins.any file.hasExt [ "go" "s" "S" "c" "h" "cc" "syso" ]
                 || builtins.elem file.name [ "go.mod" "go.sum" ])
               ./.)
-            (pkgs.lib.fileset.fileFilter (file: file.hasExt "py") ./tools)
             ./Makefile
             ./go.work
             ./review/V1_PRE_R16_REVISION_HISTORY.md
@@ -54,7 +53,7 @@
           pname = "totipo-spec-qualification";
           version = "r19";
           src = qualificationSource;
-          nativeBuildInputs = with pkgs; [ go python3 gnumake ];
+          nativeBuildInputs = with pkgs; [ go gnumake ];
           strictDeps = true;
           dontConfigure = true;
           buildPhase = ''
@@ -66,11 +65,9 @@
             export GOMODCACHE="$TMPDIR/go-mod-cache"
             export GOENV=off GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off
             export CGO_ENABLED=1 GOFLAGS=-mod=vendor
-            export PYTHONDONTWRITEBYTECODE=1
             mkdir -p "$HOME" "$GOCACHE" "$GOTMPDIR" "$GOPATH" "$GOMODCACHE"
             cp -r ${goDependencies} vendor
             go version
-            python3 --version
             test -z "$(gofmt -l generator conformance)"
             make check
             go -C generator vet ./...
@@ -99,7 +96,6 @@
             gopls
             golangci-lint
             golangci-lint-langserver
-            python3
           ];
           packages = [
             (jailed-agents.lib.${system}.makeJailedCodex {
@@ -112,7 +108,6 @@
                 golangci-lint-langserver
                 libgcc
                 gcc
-                python3
               ];
             })
             (jailed-agents.lib.${system}.makeJailedPi {
@@ -125,7 +120,6 @@
                 golangci-lint-langserver
                 libgcc
                 gcc
-                python3
               ];
             })
           ];

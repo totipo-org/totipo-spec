@@ -35,7 +35,6 @@ storage environment or application; synchronization remains optional.
 | `conformance/` | Go reference consumer and architecture guard |
 | `generator/` | Independent deliberate fixture writer |
 | `review/` | Historical decisions and review evidence |
-| `tools/` | Independent Python wire oracle and temporary reader support |
 
 The final routine repository qualification gate uses the pinned Nix environment
 after its source inputs are frozen (human execution; agents do not run Nix):
@@ -50,14 +49,13 @@ new intended milestone files must first be Git-known via intent-to-add. See the
 intentional raw/non-Git path exceptions. Keep local caches and secrets outside
 Git source membership.
 
-On Linux this runs formatting, structural/schema and integrity checks, independent Python
+On Linux this runs formatting, structural/schema and integrity checks, independent Go
 wire-oracle tests, all Go tests and manifest conformance cases, vet, race tests, and the
 three bounded fuzz targets. Linux CI uses this authoritative gate. Supplemental
 macOS/Windows jobs and Linux Go 1.23 checks provide portability evidence.
 There is no application package or additional build command.
 
-Use `nix develop` or the existing direnv setup when available. Go 1.23+ and Python
-3.9+ are supported for direct local development. Follow the
+Use `nix develop` or the existing direnv setup when available. Go 1.23+ is supported for direct local development. Follow the
 [interactive qualification ladder](AGENTS.md): one baseline `make check` for
 semantic/conformance work, focused checks while editing, then one complete host
 suite when inputs stabilize:
@@ -84,19 +82,19 @@ JSON schemas before typed decoding: required fields mean exact member presence,
 including false, zero, empty strings, and empty arrays. The schemas are independent
 contracts rather than generated Go models.
 
-Python remains temporarily for the independent wire oracle in
-`tools/test_r16_vectors.py`, using the duplicate-safe `read` helper from the
-unchanged `tools/check_vectors.py`. The latter is no longer invoked as the normal
-schema checker. W3C owns this final Python island; W3A's generator/verifier
-boundary remains unchanged.
+Go is the implementation language for generator and verifier support tooling.
+The independent stdlib-only tests in `conformance/internal/wireoracle` read
+committed artifacts with their own duplicate-safe reader and check selected
+wire/key formulas without importing either implementation. The architecture
+guard enforces that restriction and the two-module generator/verifier boundary.
+No Totipo support-tooling command requires Python.
 
 `make conformance` executes every manifest case. `make verify` checks schemas,
 case hashes, physical case coverage, and exact requirements pins. Normal checks
 never regenerate fixtures. Explicit generator maintenance remains separate.
 Make defaults to a writable Go cache under `.direnv/` and honors caller-provided
 `GOCACHE`; Nix qualification uses temporary caches and fixed vendored Go inputs,
-with Go proxy and checksum-service access disabled. Python tools use only the
-standard library. Darwin development shells remain available; full Nix
+with Go proxy and checksum-service access disabled. Darwin development shells remain available; full Nix
 qualification checks are Linux-only.
 See the [case contract](vectors/FORMAT.md) and [Go consumer](conformance/README.md).
 

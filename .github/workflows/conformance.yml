@@ -37,18 +37,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.9'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go }}
           cache-dependency-path: conformance/go.sum
-      - name: Spec policy, schemas, and independent wire oracle
+      - name: Spec policy and schemas
         run: |
           go run ./conformance/cmd/check-spec -root .
           go run ./conformance/cmd/totipo-conformance -root . -verify-only
-          python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Formatting
         shell: bash
         run: test -z "$(gofmt -l generator conformance)"

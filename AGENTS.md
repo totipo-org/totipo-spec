@@ -41,7 +41,7 @@ sensitive code, run the relevant focused target.
 Use the narrowest relevant command while editing, for example:
 
 ```sh
-python3 -m unittest <specific module/test>
+go -C conformance test ./internal/schema
 go -C conformance test ./internal/graph
 go -C conformance test ./internal/cryptov1
 ```
@@ -58,7 +58,7 @@ intended differences, and final normal corpus verification. Successful generatio
 cannot substitute for verification or justify changing expectations to pass.
 
 If `make check`, race, or fuzz fails, preserve the failure output and any
-reproduction input. Reproduce the specific Python test, Go package/test, or fuzz
+reproduction input. Reproduce the specific Go package/test or fuzz
 target; fix narrowly and rerun that focused target. Return to the complete final
 suite after stabilization. Do not restart all three fuzz targets while diagnosing
 one deterministic test failure.
@@ -76,8 +76,9 @@ git diff --check
 ```
 
 Keep any applicable formatting/structure checks required by changed inputs.
-Record the exact manifest case count, Python test count/results, Go package
-results, vet result, race result, and each fuzz target's duration/result.
+Record the exact manifest case count, Python test execution count/results (zero
+after W3C), Go package results, vet result, race result, and each fuzz target's
+duration/result.
 Final race and fuzz remain mandatory for semantic/conformance code changes.
 Do not repeat this suite after report-only edits outside qualification inputs.
 
@@ -106,7 +107,7 @@ pure prose edits.
 
 Inspect the actual source filter and structure-test dependencies before deciding
 whether docs invalidate qualification. Currently `flake.nix` includes spec,
-vectors, requirements, conformance `.go`/`go.mod`/`go.sum`, tools `.py`, Makefile,
+vectors, requirements, repository Go/native source and `go.mod`/`go.sum`, Makefile,
 go.work, and `review/V1_PRE_R16_REVISION_HISTORY.md` in `qualificationSource`.
 README, CONTRIBUTING, AGENTS, and other review reports are excluded and are not
 consumed by current structure checks. Reinspect this when inputs/filter change.
@@ -153,7 +154,7 @@ membership. Use Git-aware current-checkout forms (`nix flake check`,
 intentional, such as generated or exported source or a non-Git directory.
 
 Request the human gate only after every intended new milestone file (including
-its report) is Git-known and all flake-source inputs are frozen: Go/Python source,
+its report) is Git-known and all flake-source inputs are frozen: Go source,
 vectors/spec/requirements, Nix files/lock, deliberately included review/history,
 and qualification tooling. Any later edit to a flake-source input invalidates
 that result. Docs-only edits outside those inputs do not require a fresh request.

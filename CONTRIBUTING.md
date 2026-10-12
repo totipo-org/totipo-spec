@@ -35,7 +35,7 @@ shells remain available for development.
 
 Follow the [interactive qualification ladder](AGENTS.md). Classify each milestone
 and record its execution counts. For ordinary semantic/conformance work, run
-`make check` once at baseline, use focused Python/Go tests while editing, then
+`make check` once at baseline, use focused Go tests while editing, then
 run the final host suite once after inputs stabilize:
 
 ```sh
@@ -123,8 +123,11 @@ both independently authored checked-in schemas before strict typed acceptance;
 required fields are checked by exact member presence rather than Go zero values.
 Schema keyword or pattern extensions require explicit support and parity review.
 
-Python discovery now runs only the three independent wire-oracle tests. Keep
-`tools/test_r16_vectors.py` and its unchanged `tools/check_vectors.py` reader
-support until W3C; the Python schema CLI is no longer authoritative in normal
-qualification. Normal checks still do not execute the generator, and W3A's
-independent implementation boundary remains active.
+The independent `conformance/internal/wireoracle` Go tests preserve selected
+wire/key, VAULT_ID, capacity, and post-AEAD fixture checks. They use only stdlib
+and their own duplicate-safe serialized-artifact reader; the architecture guard
+rejects imports of generator, verifier, or external implementation packages.
+Do not replace their formulas or constants with production helpers. These tests
+do not provide independent AES-GCM or Argon2 evidence. No Totipo support-tooling
+command requires Python; the historical audit commands above apply only to their
+specified historical checkouts. Normal checks do not execute the generator.

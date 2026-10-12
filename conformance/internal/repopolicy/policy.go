@@ -96,6 +96,9 @@ func Source(root string) error {
 			if (specCommand || specPolicy) && (strings.HasPrefix(name, "totipo/") || strings.Contains(strings.Split(name, "/")[0], ".")) && !(specCommand && name == "totipo/conformance/internal/specpolicy") {
 				return fmt.Errorf("spec checker dependency requires review: %s in %s", name, path)
 			}
+			if within(filepath.Join(root, "conformance/internal/wireoracle"), path) && (strings.HasPrefix(name, "totipo/") || strings.Contains(strings.Split(name, "/")[0], ".")) {
+				return fmt.Errorf("wire oracle must use only stdlib: %s in %s", name, path)
+			}
 			own := "totipo/" + role
 			if strings.HasPrefix(name, "totipo/") && name != own && !strings.HasPrefix(name, own+"/") {
 				return fmt.Errorf("cross-role/repository import %s in %s", name, path)

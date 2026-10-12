@@ -67,7 +67,10 @@ conformance executes semantics afterward.
 
 The separate `cmd/check-spec` / `internal/specpolicy` command reads only the active
 spec and archived history. The architecture guard keeps this policy independent
-of semantic packages. The independent Python wire oracle remains active until
-W3C and still imports only the local duplicate-safe reader from the retained,
-unchanged `tools/check_vectors.py`; normal schema acceptance is now Go-owned.
-Generator/verifier isolation from W3A is unchanged.
+of semantic packages. The independent stdlib-only `internal/wireoracle` tests
+read committed artifacts with their own duplicate-safe reader and independently
+check selected HMAC/key composition, TOKEN fields, VAULT_ID, size, and post-AEAD
+fixture predicates. Their import guard prohibits production and generator helper
+reuse. They provide no independent AES-GCM or Argon2 evidence.
+Generator/verifier isolation from W3A is unchanged. No Totipo support-tooling
+command requires Python.
