@@ -129,10 +129,31 @@ The agent does not run Nix. The final routine pinned-environment gate is the
 human command:
 
 ```sh
-nix flake check path:.
+nix flake check
 ```
 
-Request it only after all flake-source inputs are frozen: Go/Python source,
+Local pre-commit Nix qualification uses the Git-aware working tree. Existing
+modified tracked files remain unstaged. For each new intended milestone file,
+the agent may run:
+
+```sh
+git add --intent-to-add <file>
+```
+
+Intent-to-add establishes source membership only. The invariant is no staged
+file content: require `git diff --cached --quiet` to pass after intent-to-add
+and before the human gate. Staging actual file contents remains prohibited
+without explicit user authorization. Leave intent-to-add entries in place for
+human review and commit; do not reset them after qualification.
+
+Ignored/local build, cache, and secret state must remain outside Git source
+membership. Use Git-aware current-checkout forms (`nix flake check`,
+`nix build .#<target>`, `nix run .#<app> -- ...`, and `nix develop`). Explicit
+`path:` sources remain allowed only when raw/non-Git path semantics are
+intentional, such as generated or exported source or a non-Git directory.
+
+Request the human gate only after every intended new milestone file (including
+its report) is Git-known and all flake-source inputs are frozen: Go/Python source,
 vectors/spec/requirements, Nix files/lock, deliberately included review/history,
 and qualification tooling. Any later edit to a flake-source input invalidates
 that result. Docs-only edits outside those inputs do not require a fresh request.

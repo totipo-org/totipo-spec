@@ -20,7 +20,7 @@ jobs:
           extra_nix_config: |
             accept-flake-config = true
       - name: Qualify specification and conformance
-        run: nix flake check --print-build-logs path:.
+        run: nix flake check --print-build-logs
 
   portability:
     name: Supplemental portability (${{ matrix.os }}, Go ${{ matrix.go }})

@@ -13,8 +13,19 @@ are removed; document every delta.
 The agent does not run Nix. The human normal qualification gate is exactly:
 
 ```sh
-nix flake check path:.
+nix flake check
 ```
+
+Local pre-commit qualification uses the Git-aware working tree, including
+unstaged modifications to tracked files. For each new intended milestone file,
+the agent may use `git add --intent-to-add <file>` to establish source membership
+only. Require `git diff --cached --quiet` to pass: staging actual file contents
+remains prohibited without explicit user authorization. Keep existing modified
+tracked files unstaged and leave intent-to-add entries for human review/commit.
+Make every intended new milestone file, including its review report, Git-known
+before the human gate. Ignored/local build, cache, and secret state must remain
+outside Git source membership. Explicit `path:` sources remain allowed only for
+intentional raw/non-Git paths, such as generated or exported source.
 
 On Linux it runs the complete pinned spec/conformance suite, including formatting,
 vet, race, and bounded fuzzing. Linux CI uses the same gate; supplemental

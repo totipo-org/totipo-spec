@@ -40,8 +40,14 @@ The final routine repository qualification gate uses the pinned Nix environment
 after its source inputs are frozen (human execution; agents do not run Nix):
 
 ```sh
-nix flake check path:.
+nix flake check
 ```
+
+This uses the Git-aware working tree: tracked modifications may remain unstaged;
+new intended milestone files must first be Git-known via intent-to-add. See the
+[contributor policy](CONTRIBUTING.md) for the no-staged-content invariant and
+intentional raw/non-Git path exceptions. Keep local caches and secrets outside
+Git source membership.
 
 On Linux this runs formatting, structural/schema and integrity checks, Python
 unit tests, all Go tests and manifest conformance cases, vet, race tests, and the
