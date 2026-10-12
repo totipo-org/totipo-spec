@@ -223,6 +223,24 @@ type pkg struct {
 	DepsErrors           []struct{ Err string }
 }
 
+func checkDependencyDir(root string, p pkg) error {
+	// The Go tool owns standard-library paths. Windows toolchain installations
+	// may use junctions that EvalSymlinks cannot traverse. Only non-standard
+	// sources need repository/cache/vendor directory policy checks.
+	if p.Standard || p.Dir == "" {
+		return nil
+	}
+	resolved, err := filepath.EvalSymlinks(p.Dir)
+	if err != nil {
+		return fmt.Errorf("resolve dependency directory %s (%q): %w", p.ImportPath, p.Dir, err)
+	}
+	// A vendor package may not resolve into another source tree.
+	if within(filepath.Join(root, "vendor"), p.Dir) && !within(filepath.Join(root, "vendor"), resolved) {
+		return fmt.Errorf("vendor source symlink escape: %s", p.ImportPath)
+	}
+	return nil
+}
+
 func Dependencies(root string) error {
 	flags, err := goCommand(root, root, "env", "GOFLAGS")
 	if err != nil {
@@ -259,15 +277,8 @@ func Dependencies(root string) error {
 			if p.Incomplete || p.Error != nil || len(p.DepsErrors) != 0 {
 				return fmt.Errorf("dependency load error: %s", p.ImportPath)
 			}
-			if p.Dir != "" {
-				resolved, e := filepath.EvalSymlinks(p.Dir)
-				if e != nil {
-					return e
-				}
-				// A vendor package may not resolve into another source tree.
-				if within(filepath.Join(root, "vendor"), p.Dir) && !within(filepath.Join(root, "vendor"), resolved) {
-					return fmt.Errorf("vendor source symlink escape: %s", p.ImportPath)
-				}
+			if err := checkDependencyDir(root, p); err != nil {
+				return err
 			}
 			if p.Standard {
 				continue
@@ -306,7 +317,7 @@ func Check(root string) error {
 	}
 	root, err = filepath.EvalSymlinks(absolute)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve repository root %q: %w", absolute, err)
 	}
 	if err = Source(root); err != nil {
 		return err

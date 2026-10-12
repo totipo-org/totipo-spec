@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -35,6 +36,46 @@ func TestPolicyAcceptsTwoModules(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDependencyDirStandardLibrary(t *testing.T) {
+	r := t.TempDir()
+	// Model a toolchain directory that Go can load but EvalSymlinks cannot
+	// traverse (for example a Windows installation behind a junction).
+	p := pkg{ImportPath: "fmt", Dir: filepath.Join(r, "unresolvable-toolchain", "src", "fmt"), Standard: true}
+	if err := checkDependencyDir(r, p); err != nil {
+		t.Fatal(err)
+	}
+	// Non-standard directory failures must still be checked and identify both
+	// the package and the failing path.
+	p.Standard = false
+	err := checkDependencyDir(r, p)
+	if err == nil || !strings.Contains(err.Error(), p.ImportPath) || !strings.Contains(err.Error(), strconv.Quote(p.Dir)) {
+		t.Fatalf("want contextual directory failure: %v", err)
+	}
+}
+
+func TestDependencyDirVendor(t *testing.T) {
+	r := t.TempDir()
+	p := pkg{ImportPath: "golang.org/x/crypto/hkdf", Dir: filepath.Join(r, "vendor", "golang.org", "x", "crypto", "hkdf")}
+	if err := os.MkdirAll(p.Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkDependencyDir(r, p); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(r, "vendor", "escape")
+	if err := os.Symlink(t.TempDir(), link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink privilege unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	p.Dir = link
+	if err := checkDependencyDir(r, p); err == nil || !strings.Contains(err.Error(), "vendor source symlink escape") {
+		t.Fatalf("want vendor escape rejection: %v", err)
+	}
+}
+
 func TestPolicyMutations(t *testing.T) {
 	for _, tt := range []struct{ name, path, body, want string }{
 		{"generator-import", "generator/a.go", "package generator\nimport _ \"totipo/conformance\"\n", "cross-role"},
