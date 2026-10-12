@@ -342,5 +342,8 @@ func Check(root string) error {
 	if err = Metadata(root); err != nil {
 		return err
 	}
+	if err = Wiring(root); err != nil {
+		return err
+	}
 	return Dependencies(root)
 }

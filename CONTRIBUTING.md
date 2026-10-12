@@ -105,6 +105,26 @@ package or cross-role subprocess delegation is allowed. `go.work` is developer
 convenience, not isolation; `make architecture` checks source, metadata, and
 resolved test dependencies. Serialized artifacts on disk are the interface.
 
+The same gate checks normal Make command wiring against an explicit reviewed
+allowlist: generation cannot become a prerequisite, recipe, or hidden Make
+expansion in verification. Executable Make changes require updating this policy
+and its negative tests; blank lines and ordinary Make comments are ignored.
+Continued comments and recipe comments require review because they can affect
+Make execution. This
+deliberately supports the current Makefile rather than interpreting arbitrary
+Make syntax. Caller-provided GO/GOCACHE and toolchain executables are trusted.
+The gate does not parse Nix or GitHub Actions; those entry points are reviewed
+to run the gate and the schema-aware verifier. `make check`, Linux
+`nix flake check`, and every portability job run the architecture checks and
+their negative tests. Generator unit tests in qualification check writer policy;
+they do not execute fixture generation. `make verify` and `make conformance`
+build only the consumer. CLI regressions hash all canonical artifact paths and
+bytes around successful and rejected verification in temporary artifact trees.
+
+For standalone module qualification, use `GOWORK=off go -C generator test
+-mod=readonly -count=1 ./...` and the corresponding conformance command; vet
+each module with `GOWORK=off go -C <module> vet -mod=readonly ./...`.
+
 `make generate` is a deliberate maintenance operation that writes fixtures and
 pins. Normal Make, Nix, and CI checking never regenerates vectors. Qualify a
 writer change by copying spec/vectors/requirements to a temporary tree, retaining

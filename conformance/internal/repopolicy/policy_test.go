@@ -29,6 +29,7 @@ func tree(t *testing.T) string {
 	put(t, r, "go.work", "go 1.23.0\nuse (\n./generator\n./conformance\n)\n")
 	put(t, r, "generator/a.go", "package generator\n")
 	put(t, r, "conformance/a.go", "package conformance\n")
+	put(t, r, "Makefile", reviewedMakefile)
 	return r
 }
 func TestPolicyAcceptsTwoModules(t *testing.T) {
@@ -115,6 +116,8 @@ func TestPolicyMutations(t *testing.T) {
 		{"generator-import", "generator/a.go", "package generator\nimport _ \"totipo/conformance\"\n", "cross-role"},
 		{"verifier-import", "conformance/a.go", "package conformance\nimport _ \"totipo/generator\"\n", "cross-role"},
 		{"third-module", "third/go.mod", "module totipo/third\ngo 1.23.0\n", "third/root"},
+		{"shared-semantic-module", "shared/go.mod", "module example.org/semantics\ngo 1.23.0\n", "third/root"},
+		{"primitive-local-replacement", "conformance/go.mod", "module totipo/conformance\ngo 1.23.0\nrequire golang.org/x/crypto v0.36.0\nrequire golang.org/x/sys v0.31.0 // indirect\nreplace golang.org/x/crypto => ../generator\n", "metadata"},
 		{"root-module", "go.mod", "module totipo\ngo 1.23.0\n", "third/root"},
 		{"extra-workspace", "go.work", "go 1.23.0\nuse (\n./generator\n./conformance\n./third\n)\n", "workspace"},
 		{"replace", "generator/go.mod", "module totipo/generator\ngo 1.23.0\nreplace totipo/conformance => ../conformance\n", "metadata"},

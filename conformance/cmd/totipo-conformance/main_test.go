@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"totipo/conformance/internal/vectors"
@@ -138,5 +141,65 @@ func TestCLIArgumentsAndLoadRefusal(t *testing.T) {
 	write(t, r, "requirements/v1-pre-rc.json", p)
 	if code, out := call(r, true); code != 1 || !strings.Contains(out, "profile") {
 		t.Fatal(code, out)
+	}
+}
+
+// Snapshot paths as well as bytes: additions, removals and rewrites must fail.
+// The disposable tree contains only committed artifacts, with no generator,
+// module source, or executable available beneath the supplied root.
+func artifactSnapshot(t *testing.T, root string) map[string][32]byte {
+	t.Helper()
+	result := map[string][32]byte{}
+	for _, dir := range []string{"spec", "vectors", "requirements"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			result[rel] = sha256.Sum256(b)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return result
+}
+
+func TestCLIVerificationLeavesArtifactsUnchanged(t *testing.T) {
+	for _, invalid := range []bool{false, true} {
+		t.Run(map[bool]string{false: "valid", true: "invalid"}[invalid], func(t *testing.T) {
+			r := tree(t)
+			wantCode := 0
+			if invalid {
+				// Failure must leave the bad serialized input untouched as well.
+				if err := os.WriteFile(filepath.Join(r, "vectors/manifest.json"), []byte("{"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				wantCode = 1
+			}
+			before := artifactSnapshot(t, r)
+			if len(before) != 100 {
+				t.Fatalf("artifact inventory: %d", len(before))
+			}
+			for _, verify := range []bool{true, false} {
+				if code, out := call(r, verify); code != wantCode {
+					t.Fatal(code, out)
+				}
+				if !reflect.DeepEqual(before, artifactSnapshot(t, r)) {
+					t.Fatal("verification changed canonical artifact paths or bytes")
+				}
+			}
+		})
 	}
 }
