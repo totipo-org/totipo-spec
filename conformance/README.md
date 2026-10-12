@@ -44,12 +44,12 @@ adapter must implement the specification's durability and truthful reporting rul
 Tests never regenerate fixtures. For an intentional reviewed protocol update:
 
 ```sh
-go run ./conformance/cmd/generate-vectors -root .
+make generate
 make verify
 make conformance
 ```
 
-The generator constructs deterministic TOKEN bytes using public test roots and
+The sibling generator module independently constructs deterministic TOKEN bytes using public test roots and
 preserves the independent RFC TOTP answers. Semantic graph/workflow expectations
 are specified explicitly, not queried from the evaluator. Review the diff and
 pins; independent interoperability remains necessary before RC freeze.

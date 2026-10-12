@@ -51,12 +51,24 @@ jobs:
           python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Formatting
         shell: bash
-        run: test -z "$(gofmt -l conformance)"
+        run: test -z "$(gofmt -l generator conformance)"
       - name: Vet and tests
         working-directory: conformance
         run: |
           go vet ./...
           go test -count=1 ./...
+      - name: Generator vet and tests
+        working-directory: generator
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+      - name: Architecture boundary
+        run: go run ./conformance/cmd/check-architecture -root .
+      - name: Standalone modules
+        shell: bash
+        run: |
+          GOWORK=off GOPROXY=off GOSUMDB=off go -C generator test -mod=readonly -count=1 ./...
+          GOWORK=off GOPROXY=off GOSUMDB=off go -C conformance test -mod=readonly -count=1 ./...
       - name: Manifest-driven conformance
         run: go run ./conformance/cmd/totipo-conformance -root .
       - name: Manifest and profile integrity

@@ -40,13 +40,14 @@ run the final host suite once after inputs stabilize:
 
 ```sh
 make check
+go -C generator vet ./...
 go -C conformance vet ./...
 make race
 make fuzz
 git diff --check
 ```
 
-Preserve applicable formatting checks (`gofmt -l conformance`). Final race and
+Preserve applicable formatting checks (`gofmt -l generator conformance`). Final race and
 all three bounded fuzz targets remain mandatory for semantic/conformance code
 changes. Preserve failures and diagnose with focused commands before repeating
 the final suite. Keep generation separate from verification.
@@ -96,3 +97,21 @@ behavior.
 
 Report suspected vulnerabilities through [SECURITY.md](SECURITY.md). The project
 uses the [Apache License 2.0](LICENSE).
+
+The sibling `totipo/generator` and `totipo/conformance` modules intentionally own
+separate Totipo data models, protocol constants, and composition logic. Small
+duplicated formulas are independence evidence. No shared repository Totipo Go
+package or cross-role subprocess delegation is allowed. `go.work` is developer
+convenience, not isolation; `make architecture` checks source, metadata, and
+resolved test dependencies. Serialized artifacts on disk are the interface.
+
+`make generate` is a deliberate maintenance operation that writes fixtures and
+pins. Normal Make, Nix, and CI checking never regenerates vectors. Qualify a
+writer change by copying spec/vectors/requirements to a temporary tree, retaining
+the RFC TOTP and bootstrap source known answers, running
+`go run ./generator/cmd/generate-vectors -root /path/to/temp-tree`, and comparing
+all output bytes and inventories before normal verification. Do not derive
+authored graph/storage expectations from verifier results.
+
+The older generator path in the unchanged `vectors/FORMAT.md` is superseded by
+`make generate` (or `go run ./generator/cmd/generate-vectors -root .`).

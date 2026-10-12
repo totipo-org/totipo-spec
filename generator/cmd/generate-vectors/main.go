@@ -4,9 +4,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/binary"
+
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -15,15 +13,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"totipo/conformance/internal/cryptov1"
-	"totipo/conformance/internal/graph"
-	"totipo/conformance/internal/object"
-	"totipo/conformance/internal/tlv"
-	"totipo/conformance/internal/vectors"
+	"totipo/generator/internal/fixture"
+	"totipo/generator/internal/wire"
 )
 
 var root string
-var cases []vectors.Case
+var cases []fixture.Case
 var rootKey = bytes.Repeat([]byte{0x11}, 32)
 
 func must(e error) {
@@ -34,21 +29,21 @@ func must(e error) {
 func hx(b []byte) string                { return hex.EncodeToString(b) }
 func raw(s string) []byte               { b, e := hex.DecodeString(s); must(e); return b }
 func id(n byte) []byte                  { return bytes.Repeat([]byte{n}, 32) }
-func field(tag uint16, b []byte) []byte { p, e := tlv.Encode(tag, b); must(e); return p }
+func field(tag uint16, b []byte) []byte { p, e := wire.Encode(tag, b); must(e); return p }
 func write(path string, v any) {
 	b, e := json.MarshalIndent(v, "", "  ")
 	must(e)
 	must(os.MkdirAll(filepath.Dir(path), 0755))
 	must(os.WriteFile(path, append(b, '\n'), 0644))
 }
-func base(name, op string) vectors.Case {
-	return vectors.Case{Format: "totipo-case-v1", ID: "v1." + name + ".001", Operation: op, Expected: "PASS"}
+func base(name, op string) fixture.Case {
+	return fixture.Case{Format: "totipo-case-v1", ID: "v1." + name + ".001", Operation: op, Expected: "PASS"}
 }
-func token() object.Object {
-	return object.Object{Identity: id(0x22), Parents: [][]byte{}, Status: 1, Issuer: "Example", Account: "alice@example.test", Algorithm: 1, Digits: 6, Period: 30, Secret: []byte("12345678901234567890")}
+func token() wire.Token {
+	return wire.Token{Identity: id(0x22), Parents: [][]byte{}, Status: 1, Issuer: "Example", Account: "alice@example.test", Algorithm: 1, Digits: 6, Period: 30, Secret: []byte("12345678901234567890")}
 }
-func encoded(o object.Object) []byte { p, e := o.Encode(); must(e); return p }
-func envelope(name string, p []byte, input *object.Object, valid bool) vectors.Case {
+func encoded(o wire.Token) []byte { p, e := o.Encode(); must(e); return p }
+func envelope(name string, p []byte, input *wire.Token, valid bool) fixture.Case {
 	c := base(name, "crypto")
 	c.Root = hx(rootKey)
 	c.Semantic = hx(p)
@@ -56,19 +51,19 @@ func envelope(name string, p []byte, input *object.Object, valid bool) vectors.C
 		copyInput := *input
 		c.Input = &copyInput
 	}
-	c.Expected = object.Supported
+	c.Expected = "SUPPORTED_VALID"
 	if !valid {
 		c.Operation = "dispatch"
-		c.Expected = object.Invalid
+		c.Expected = "INVALID"
 	}
-	k, e := cryptov1.Derive(rootKey)
+	k, e := wire.Derive(rootKey)
 	must(e)
 	nameID, b, e := k.Seal(p)
 	must(e)
 	rid := raw(nameID)
-	padded, e := cryptov1.Padded(p)
+	padded, e := wire.Padded(p)
 	must(e)
-	c.Crypto = &vectors.Crypto{ObjectID: nameID, IDKey: hx(k.ID), ObjectRootKey: hx(k.ObjectRoot), ObjectKey: hx(k.ObjectKey(rid)), Nonce: hx(rid[:12]), AAD: hx(cryptov1.AAD(rid)), SemanticLength: len(p), Padded: hx(padded), Ciphertext: hx(b[:1008]), Tag: hx(b[1008:]), Object: hx(b)}
+	c.Crypto = &fixture.Crypto{ObjectID: nameID, IDKey: hx(k.ID), ObjectRootKey: hx(k.ObjectRoot), ObjectKey: hx(k.ObjectKey(rid)), Nonce: hx(rid[:12]), AAD: hx(wire.AAD(rid)), SemanticLength: len(p), Padded: hx(padded), Ciphertext: hx(b[:1008]), Tag: hx(b[1008:]), Object: hx(b)}
 	cases = append(cases, c)
 	return c
 }
@@ -78,45 +73,29 @@ func envelope(name string, p []byte, input *object.Object, valid bool) vectors.C
 // context so AEAD succeeds even in the keyed-ID-mismatch case.
 func postAEAD(defect string) {
 	p := encoded(token())
-	k, e := cryptov1.Derive(rootKey)
+	k, e := wire.Derive(rootKey)
 	must(e)
-	rid := cryptov1.MAC(k.ID, p)
-	plain, e := cryptov1.Padded(p)
+	rid, plain, b, e := wire.Malform(k, p, defect)
 	must(e)
-	switch defect {
-	case "nonzero-padding":
-		plain[len(plain)-1] = 1
-	case "object-id-mismatch":
-		rid[0] ^= 1
-	case "semantic-length-invalid":
-		binary.BigEndian.PutUint16(plain, 1007)
-	default:
-		panic("unknown defect")
-	}
-	block, e := aes.NewCipher(k.ObjectKey(rid))
-	must(e)
-	a, e := cipher.NewGCM(block)
-	must(e)
-	b := a.Seal(nil, rid[:12], plain, cryptov1.AAD(rid))
 	c := base("crypto."+defect, "post-aead")
 	c.Expected = "INVALID_STORAGE"
 	c.Root = hx(rootKey)
 	c.Semantic = hx(p)
 	c.Notes = "GCM authentication succeeds under the exact filename-derived context. The named post-AEAD boundary rejects; no TOKEN state is accepted. No HMAC collision is claimed."
-	c.PostAEAD = &vectors.PostAEAD{ObjectID: hx(rid), Plaintext: hx(plain), Object: hx(b), Defect: defect}
+	c.PostAEAD = &fixture.PostAEAD{ObjectID: hx(rid), Plaintext: hx(plain), Object: hx(b), Defect: defect}
 	cases = append(cases, c)
 }
-func node(n, identity, value string, parents ...string) *graph.Node {
-	return &graph.Node{ID: n, Identity: identity, Parents: parents, Canonical: n + "/" + identity + "/" + value + "/" + strings.Join(parents, ","), Value: value}
+func node(n, identity, value string, parents ...string) *fixture.Node {
+	return &fixture.Node{ID: n, Identity: identity, Parents: parents, Canonical: n + "/" + identity + "/" + value + "/" + strings.Join(parents, ","), Value: value}
 }
-func metadata(n *graph.Node, name string, time uint64) *graph.Node {
+func metadata(n *fixture.Node, name string, time uint64) *fixture.Node {
 	n.ClientName = &name
 	n.ClientTime = &time
 	n.Canonical += fmt.Sprintf("/metadata/%q/%d", name, time)
 	return n
 }
-func add(n *graph.Node) vectors.Step { return vectors.Step{Action: "add", Node: n} }
-func result(identity string, heads, values, missing []string) vectors.Step {
+func add(n *fixture.Node) fixture.Step { return fixture.Step{Action: "add", Node: n} }
+func result(identity string, heads, values, missing []string) fixture.Step {
 	if heads == nil {
 		heads = []string{}
 	}
@@ -126,14 +105,14 @@ func result(identity string, heads, values, missing []string) vectors.Step {
 	if missing == nil {
 		missing = []string{}
 	}
-	return vectors.Step{Action: "evaluate", Identity: identity, Want: &graph.Result{Heads: heads, Values: values, Unresolved: missing, Conflicting: len(values) > 1}}
+	return fixture.Step{Action: "evaluate", Identity: identity, Want: &fixture.Result{Heads: heads, Values: values, Unresolved: missing, Conflicting: len(values) > 1}}
 }
-func graphCase(name string, steps ...vectors.Step) {
+func graphCase(name string, steps ...fixture.Step) {
 	c := base("graph."+name, "graph")
 	c.Notes = "Abstract validated TOKEN facts; symbolic IDs and cycles are not encrypted collision fixtures."
 	// Expected head IDs/values are authored above, not queried from an evaluator.
 	// Attach each declared head's exact fixture record to that explicit expectation.
-	records := map[string]graph.Node{}
+	records := map[string]fixture.Node{}
 	for i := range steps {
 		step := &steps[i]
 		if step.Action == "add" {
@@ -147,7 +126,7 @@ func graphCase(name string, steps ...vectors.Step) {
 			delete(records, step.ID)
 		}
 		if step.Want != nil {
-			step.Want.HeadObjects = []graph.Node{}
+			step.Want.HeadObjects = []fixture.Node{}
 			for _, id := range step.Want.Heads {
 				n, ok := records[id]
 				if !ok {
@@ -157,18 +136,18 @@ func graphCase(name string, steps ...vectors.Step) {
 			}
 		}
 	}
-	c.Graph = &vectors.GraphCase{Steps: steps}
+	c.Graph = &fixture.GraphCase{Steps: steps}
 	cases = append(cases, c)
 }
-func workflow(name string, w vectors.Workflow) {
+func workflow(name string, w fixture.Workflow) {
 	c := base(name, "workflow")
 	c.Workflow = &w
 	cases = append(cases, c)
 }
-func storageCase(name string, entries []vectors.StorageEntry, classes []string, diagnostics bool) {
+func storageCase(name string, entries []fixture.StorageEntry, classes []string, diagnostics bool) {
 	c := base("storage."+name, "storage")
 	c.Root = hx(rootKey)
-	c.Storage = &vectors.StorageCase{NamespaceKind: "directory", Entries: entries, Classes: classes, Diagnostics: diagnostics}
+	c.Storage = &fixture.StorageCase{NamespaceKind: "directory", Entries: entries, Classes: classes, Diagnostics: diagnostics}
 	cases = append(cases, c)
 }
 func main() {
@@ -178,8 +157,8 @@ func main() {
 	for _, alg := range []string{"sha1", "sha256", "sha512"} {
 		b, e := os.ReadFile(filepath.Join(root, "vectors/cases/totp/v1.totp.rfc6238-"+alg+".001.json"))
 		must(e)
-		var c vectors.Case
-		must(vectors.Decode(b, &c))
+		var c fixture.Case
+		must(fixture.ReadSource(b, &c))
 		cases = append(cases, c)
 	}
 	for _, defect := range []string{"nonzero-padding", "object-id-mismatch", "semantic-length-invalid"} {
@@ -253,12 +232,12 @@ func main() {
 	// Malformed plaintexts are still genuinely authenticated and keyed, isolating
 	// semantic rejection from the outer envelope validation boundary.
 	p := encoded(token())
-	envelope("encoding.parent-count-mismatch", append(append(bytes.Clone(p[:36]), field(2, tlv.U16(1))...), p[42:]...), nil, false)
+	envelope("encoding.parent-count-mismatch", append(append(bytes.Clone(p[:36]), field(2, wire.U16(1))...), p[42:]...), nil, false)
 	for _, x := range []struct {
 		name    string
 		parents [][]byte
 	}{{"parent-order", [][]byte{id(2), id(1)}}, {"parent-duplicate", [][]byte{id(1), id(1)}}, {"five-parents", [][]byte{id(1), id(2), id(3), id(4), id(5)}}} {
-		q := append(bytes.Clone(p[:36]), field(2, tlv.U16(uint16(len(x.parents))))...)
+		q := append(bytes.Clone(p[:36]), field(2, wire.U16(uint16(len(x.parents))))...)
 		for _, parent := range x.parents {
 			q = append(q, field(3, parent)...)
 		}
@@ -272,7 +251,7 @@ func main() {
 	envelope("encoding.client-name-too-long", append(bytes.Clone(p), field(11, bytes.Repeat([]byte{'n'}, 129))...), nil, false)
 	envelope("encoding.client-name-invalid-utf8", append(bytes.Clone(p), field(11, []byte{0xff})...), nil, false)
 	envelope("encoding.client-time-width", append(bytes.Clone(p), field(12, make([]byte, 7))...), nil, false)
-	q := append(bytes.Clone(p), field(12, tlv.U64(0))...)
+	q := append(bytes.Clone(p), field(12, wire.U64(0))...)
 	q = append(q, field(11, nil)...)
 	envelope("encoding.metadata-order", q, nil, false)
 	envelope("encoding.non-token-plaintext", []byte("authenticated but not a TOKEN"), nil, false)
@@ -280,11 +259,11 @@ func main() {
 		name  string
 		tag   uint16
 		value []byte
-	}{{"status-range", 4, []byte{3}}, {"algorithm-range", 7, []byte{4}}, {"digits-range", 8, []byte{5}}, {"period-zero", 9, tlv.U32(0)}, {"secret-empty", 10, nil}, {"secret-too-long", 10, make([]byte, 129)}, {"issuer-too-long", 5, make([]byte, 257)}, {"issuer-invalid-utf8", 5, []byte{0xff}}, {"account-too-long", 6, make([]byte, 257)}, {"identity-width", 1, make([]byte, 31)}} {
+	}{{"status-range", 4, []byte{3}}, {"algorithm-range", 7, []byte{4}}, {"digits-range", 8, []byte{5}}, {"period-zero", 9, wire.U32(0)}, {"secret-empty", 10, nil}, {"secret-too-long", 10, make([]byte, 129)}, {"issuer-too-long", 5, make([]byte, 257)}, {"issuer-invalid-utf8", 5, []byte{0xff}}, {"account-too-long", 6, make([]byte, 257)}, {"identity-width", 1, make([]byte, 31)}} {
 		rest := p
 		q := []byte{}
 		for len(rest) > 0 {
-			f, r, e := tlv.Take(rest)
+			f, r, e := wire.SplitField(rest)
 			must(e)
 			rest = r
 			if f.Tag == x.tag {
@@ -299,9 +278,9 @@ func main() {
 	for _, name := range []string{"ascii", "empty", "unicode", "known-answer-extra"} {
 		b, e := os.ReadFile(filepath.Join(root, "vectors/cases/bootstrap/v1.bootstrap."+name+".001.json"))
 		must(e)
-		var c vectors.Case
+		var c fixture.Case
 		must(json.Unmarshal(b, &c))
-		vid, e := cryptov1.VaultID(raw(c.Bootstrap.Record))
+		vid, e := wire.VaultID(raw(c.Bootstrap.Record))
 		must(e)
 		c.Bootstrap.VaultID = hx(vid)
 		cases = append(cases, c)
@@ -310,7 +289,7 @@ func main() {
 	differentVaultBytes := raw(cases[len(cases)-1].Bootstrap.Record)
 	changed := bytes.Clone(vaultBytes)
 	changed[86] ^= 1
-	changedID, e := cryptov1.VaultID(changed)
+	changedID, e := wire.VaultID(changed)
 	must(e)
 	identityCase := cases[len(cases)-4]
 	identityCase.ID = "v1.bootstrap.vault-id-mutation.001"
@@ -325,8 +304,8 @@ func main() {
 	graphCase("conflicting-concurrent", add(node("A", "T", "X")), add(node("B", "T", "Y")), result("T", []string{"A", "B"}, []string{"X", "Y"}, nil))
 	graphCase("late-parent", add(node("B", "T", "Y", "A")), result("T", []string{"B"}, []string{"Y"}, []string{"A"}), add(node("A", "T", "X")), result("T", []string{"B"}, []string{"Y"}, nil))
 	graphCase("wrong-identity-parent", add(node("A", "U", "X")), add(node("B", "T", "Y", "A")), result("T", []string{"B"}, []string{"Y"}, []string{"A"}))
-	graphCase("intermediate-disappears", add(node("A", "T", "X")), add(node("B", "T", "Y", "A")), add(node("C", "T", "Z", "B")), vectors.Step{Action: "remove", ID: "B"}, result("T", []string{"A", "C"}, []string{"X", "Z"}, []string{"B"}))
-	graphCase("reappearance", add(node("A", "T", "X")), add(node("B", "T", "Y", "A")), vectors.Step{Action: "remove", ID: "A"}, result("T", []string{"B"}, []string{"Y"}, []string{"A"}), add(node("A", "T", "X")), result("T", []string{"B"}, []string{"Y"}, nil))
+	graphCase("intermediate-disappears", add(node("A", "T", "X")), add(node("B", "T", "Y", "A")), add(node("C", "T", "Z", "B")), fixture.Step{Action: "remove", ID: "B"}, result("T", []string{"A", "C"}, []string{"X", "Z"}, []string{"B"}))
+	graphCase("reappearance", add(node("A", "T", "X")), add(node("B", "T", "Y", "A")), fixture.Step{Action: "remove", ID: "A"}, result("T", []string{"B"}, []string{"Y"}, []string{"A"}), add(node("A", "T", "X")), result("T", []string{"B"}, []string{"Y"}, nil))
 	for _, equal := range []bool{true, false} {
 		name, value := "cycle-equal", "X"
 		values := []string{"X"}
@@ -338,11 +317,11 @@ func main() {
 	}
 	graphCase("late-cycle", add(node("A", "T", "X", "B")), add(node("B", "T", "X", "C")), result("T", []string{"A"}, []string{"X"}, []string{"C"}), add(node("C", "T", "X", "A")), result("T", []string{"A", "B", "C"}, []string{"X"}, nil))
 	graphCase("self-cycle", add(node("A", "T", "X", "A")), result("T", []string{"A"}, []string{"X"}, nil))
-	graphCase("same-id-defensive", add(node("A", "T", "X")), vectors.Step{Action: "add", Node: node("A", "T", "Y"), IntegrityError: true}, add(node("B", "T", "Z", "A")), add(node("U", "U", "W")), result("T", []string{"B"}, []string{"Z"}, []string{"A"}), result("U", []string{"U"}, []string{"W"}, nil))
+	graphCase("same-id-defensive", add(node("A", "T", "X")), fixture.Step{Action: "add", Node: node("A", "T", "Y"), IntegrityError: true}, add(node("B", "T", "Z", "A")), add(node("U", "U", "W")), result("T", []string{"B"}, []string{"Z"}, []string{"A"}), result("U", []string{"U"}, []string{"W"}, nil))
 	graphCase("identical-collapse", add(node("A", "T", "X")), add(node("A", "T", "X")), result("T", []string{"A"}, []string{"X"}, nil))
 	for _, n := range []int{0, 4, 5, 7, 10, 11} {
 		c := base(fmt.Sprintf("fold.width-%d", n), "fold")
-		f := &vectors.FoldCase{Token: token(), Frontier: []string{}, StageIDs: []string{}, Parents: [][]string{}}
+		f := &fixture.FoldCase{Token: token(), Frontier: []string{}, StageIDs: []string{}, Parents: [][]string{}}
 		switch n {
 		case 5:
 			name := ""
@@ -391,29 +370,29 @@ func main() {
 		c.Notes = "Symbolic stage IDs test fixed fold planning with one complete operation. Every stage must preserve the token value and exact client metadata. Integration tests also construct and open encrypted stages."
 		cases = append(cases, c)
 	}
-	valid := vectors.StorageEntry{Path: "objects-v1/" + r.Crypto.ObjectID, Kind: "regular", Object: r.Crypto.Object}
-	storageCase("objects-v1", []vectors.StorageEntry{valid}, []string{object.Supported}, false)
+	valid := fixture.StorageEntry{Path: "objects-v1/" + r.Crypto.ObjectID, Kind: "regular", Object: r.Crypto.Object}
+	storageCase("objects-v1", []fixture.StorageEntry{valid}, []string{"SUPPORTED_VALID"}, false)
 	ignored := valid
 	ignored.Path += ".tmp"
-	storageCase("nonobject-name-ignored", []vectors.StorageEntry{ignored}, []string{}, false)
+	storageCase("nonobject-name-ignored", []fixture.StorageEntry{ignored}, []string{}, false)
 	ignored = valid
 	ignored.Path = "objects-v2/" + r.Crypto.ObjectID
-	storageCase("unknown-sibling-ignored", []vectors.StorageEntry{ignored}, []string{}, false)
+	storageCase("unknown-sibling-ignored", []fixture.StorageEntry{ignored}, []string{}, false)
 	wrong := valid
 	wrong.Object = "00"
-	storageCase("wrong-size", []vectors.StorageEntry{wrong}, []string{"INVALID_STORAGE"}, false)
+	storageCase("wrong-size", []fixture.StorageEntry{wrong}, []string{"INVALID_STORAGE"}, false)
 	unreadable := valid
 	unreadable.Path = "objects-v1/" + hx(id(0xfa))
 	unreadable.Unreadable = true
-	storageCase("incomplete-diagnostics", []vectors.StorageEntry{unreadable, valid}, []string{object.Supported}, true)
+	storageCase("incomplete-diagnostics", []fixture.StorageEntry{unreadable, valid}, []string{"SUPPORTED_VALID"}, true)
 	wrong = valid
 	b := raw(wrong.Object)
 	b[0] ^= 1
 	wrong.Object = hx(b)
-	storageCase("failed-aead", []vectors.StorageEntry{wrong, valid}, []string{"INVALID_STORAGE", object.Supported}, false)
+	storageCase("failed-aead", []fixture.StorageEntry{wrong, valid}, []string{"INVALID_STORAGE", "SUPPORTED_VALID"}, false)
 	for _, c := range cases {
 		if c.ID == "v1.encoding.non-token-plaintext.001" {
-			storageCase("invalid-grammar", []vectors.StorageEntry{{Path: "objects-v1/" + c.Crypto.ObjectID, Kind: "regular", Object: c.Crypto.Object}}, []string{object.Invalid}, false)
+			storageCase("invalid-grammar", []fixture.StorageEntry{{Path: "objects-v1/" + c.Crypto.ObjectID, Kind: "regular", Object: c.Crypto.Object}}, []string{"INVALID"}, false)
 			break
 		}
 	}
@@ -425,7 +404,7 @@ func main() {
 		if x.name == "missing-parent-publication" {
 			intended = child.Crypto.Object
 		}
-		workflow("storage."+x.name, vectors.Workflow{Action: "publish", Kind: x.kind, Existing: x.existing, Intended: intended, Complete: true, Durable: x.durable, ParentsAvailable: x.parents, Result: x.result})
+		workflow("storage."+x.name, fixture.Workflow{Action: "publish", Kind: x.kind, Existing: x.existing, Intended: intended, Complete: true, Durable: x.durable, ParentsAvailable: x.parents, Result: x.result})
 	}
 	for _, x := range []struct {
 		name, kind, result            string
@@ -440,12 +419,12 @@ func main() {
 		{"create-revalidation-failed", "absent", "FAILED", false, true, false, nil},
 		{"create-wrong-type", "symlink", "FAILED", false, true, true, nil},
 	} {
-		workflow("vault."+x.name, vectors.Workflow{Action: "create", Kind: x.kind, Existing: hx(x.existing), Intended: hx(vaultBytes), Complete: true, Durable: x.durable, Readable: x.revalidated, OrphanObjects: x.orphans, Result: x.result})
+		workflow("vault."+x.name, fixture.Workflow{Action: "create", Kind: x.kind, Existing: hx(x.existing), Intended: hx(vaultBytes), Complete: true, Durable: x.durable, Readable: x.revalidated, OrphanObjects: x.orphans, Result: x.result})
 	}
-	workflow("vault.object-publication-unchanged", vectors.Workflow{Action: "publish", Kind: "absent", Intended: r.Crypto.Object, Vault: hx(vaultBytes), Complete: true, Durable: true, Result: "PUBLISHED_NEW"})
-	workflow("vault.object-exact-retry-unchanged", vectors.Workflow{Action: "publish", Kind: "regular", Existing: r.Crypto.Object, Intended: r.Crypto.Object, Vault: hx(vaultBytes), Complete: true, Result: "ALREADY_PRESENT_EXACT"})
+	workflow("vault.object-publication-unchanged", fixture.Workflow{Action: "publish", Kind: "absent", Intended: r.Crypto.Object, Vault: hx(vaultBytes), Complete: true, Durable: true, Result: "PUBLISHED_NEW"})
+	workflow("vault.object-exact-retry-unchanged", fixture.Workflow{Action: "publish", Kind: "regular", Existing: r.Crypto.Object, Intended: r.Crypto.Object, Vault: hx(vaultBytes), Complete: true, Result: "ALREADY_PRESENT_EXACT"})
 	sort.Slice(cases, func(i, j int) bool { return cases[i].ID < cases[j].ID })
-	manifest := vectors.Manifest{Format: "totipo-vector-manifest-v1", Protocol: "totipo-v1", Revision: "r19", Cases: []vectors.Entry{}}
+	manifest := fixture.Manifest{Format: "totipo-vector-manifest-v1", Protocol: "totipo-v1", Revision: "r19", Cases: []fixture.Entry{}}
 	keep := map[string]bool{}
 	for _, c := range cases {
 		category := strings.Split(c.ID, ".")[1]
@@ -478,10 +457,10 @@ func main() {
 		case "workflow":
 			sections = []string{"3", "7", "18"}
 		}
-		if c.Expected == object.Invalid {
+		if c.Expected == "INVALID" {
 			kind = "negative"
 		}
-		manifest.Cases = append(manifest.Cases, vectors.Entry{ID: c.ID, Category: category, Kind: kind, Normative: true, Path: path, Expected: c.Expected, Sections: sections, SHA256: vectors.Hash(b)})
+		manifest.Cases = append(manifest.Cases, fixture.Entry{ID: c.ID, Category: category, Kind: kind, Normative: true, Path: path, Expected: c.Expected, Sections: sections, SHA256: fixture.Hash(b)})
 		keep[filepath.Clean(full)] = true
 	}
 	must(filepath.WalkDir(filepath.Join(root, "vectors/cases"), func(path string, d os.DirEntry, e error) error {
@@ -497,11 +476,11 @@ func main() {
 	hashFile := func(path string) string {
 		b, e := os.ReadFile(filepath.Join(root, path))
 		must(e)
-		return vectors.Hash(b)
+		return fixture.Hash(b)
 	}
-	profile := vectors.Profile{Format: "totipo-requirements-v1", Status: "moving-pre-rc", Protocol: "totipo-v1", Revision: "r19", SpecSHA256: hashFile("spec/totipo-vault-format-v1.md"), ManifestSHA256: hashFile("vectors/manifest.json"), SchemaSHA256: hashFile("vectors/manifest.schema.json"), CaseSchemaSHA256: hashFile("vectors/case.schema.json"), Required: []vectors.Pin{}}
+	profile := fixture.Profile{Format: "totipo-requirements-v1", Status: "moving-pre-rc", Protocol: "totipo-v1", Revision: "r19", SpecSHA256: hashFile("spec/totipo-vault-format-v1.md"), ManifestSHA256: hashFile("vectors/manifest.json"), SchemaSHA256: hashFile("vectors/manifest.schema.json"), CaseSchemaSHA256: hashFile("vectors/case.schema.json"), Required: []fixture.Pin{}}
 	for _, e := range manifest.Cases {
-		profile.Required = append(profile.Required, vectors.Pin{ID: e.ID, SHA256: e.SHA256})
+		profile.Required = append(profile.Required, fixture.Pin{ID: e.ID, SHA256: e.SHA256})
 	}
 	write(filepath.Join(root, "requirements/v1-pre-rc.json"), profile)
 	fmt.Printf("Generated r19: %d cases\n", len(cases))

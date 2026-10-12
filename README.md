@@ -32,7 +32,8 @@ storage environment or application; synchronization remains optional.
 | `spec/` | Current normative protocol |
 | `vectors/` | Exact byte, negative, graph, fold, and storage workflow cases |
 | `requirements/` | Moving pre-RC pins |
-| `conformance/` | Go reference consumer and explicit fixture generator |
+| `conformance/` | Go reference consumer and architecture guard |
+| `generator/` | Independent deliberate fixture writer |
 | `review/` | Historical decisions and review evidence |
 | `tools/` | Structural and schema checks |
 
@@ -63,6 +64,7 @@ suite when inputs stabilize:
 
 ```sh
 make check
+go -C generator vet ./...
 go -C conformance vet ./...
 make race
 make fuzz

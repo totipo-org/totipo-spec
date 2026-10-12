@@ -24,9 +24,12 @@
             ./spec
             ./vectors
             ./requirements
+            # Include all repository Go/native inputs so the architecture guard
+            # can reject forbidden roots/modules even in the filtered source.
             (pkgs.lib.fileset.fileFilter
-              (file: file.hasExt "go" || builtins.elem file.name [ "go.mod" "go.sum" ])
-              ./conformance)
+              (file: builtins.any file.hasExt [ "go" "s" "S" "c" "h" "cc" "syso" ]
+                || builtins.elem file.name [ "go.mod" "go.sum" ])
+              ./.)
             (pkgs.lib.fileset.fileFilter (file: file.hasExt "py") ./tools)
             ./Makefile
             ./go.work
@@ -68,8 +71,9 @@
             cp -r ${goDependencies} vendor
             go version
             python3 --version
-            test -z "$(gofmt -l conformance)"
+            test -z "$(gofmt -l generator conformance)"
             make check
+            go -C generator vet ./...
             go -C conformance vet ./...
             make race
             make fuzz

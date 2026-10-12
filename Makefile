@@ -4,20 +4,22 @@ PYTHON ?= python3
 export GOCACHE ?= $(CURDIR)/.direnv/go-build
 
 .DEFAULT_GOAL := help
-.PHONY: help spec-check test race fuzz conformance verify check
+.PHONY: help spec-check test race fuzz conformance verify check architecture generate
 .NOTPARALLEL: check
 
 help:
-	@printf '%s\n' 'make spec-check  Check the v1/r19 specification structure' 'make test        Run Go tests' 'make conformance Run all v1/r19 requirements' 'make verify      Verify manifest, files, and moving profile' 'make check       Run all required checks' 'make race        Run Go race tests' 'make fuzz        Run bounded parser fuzzing'
+	@printf '%s\n' 'make spec-check  Check the v1/r19 specification structure' 'make test        Run Go tests' 'make conformance Run all v1/r19 requirements' 'make verify      Verify manifest, files, and moving profile' 'make check       Run all required checks' 'make race        Run Go race tests' 'make fuzz        Run bounded parser fuzzing' 'make architecture Enforce the two-module implementation boundary' 'make generate    Deliberately regenerate fixtures and pins'
 
 spec-check:
 	$(PYTHON) tools/check_spec.py
 
 test:
+	$(GO) -C generator test -count=1 ./...
 	$(PYTHON) -m unittest discover -s tools -p 'test_*.py'
 	$(GO) -C conformance test -count=1 ./...
 
 race:
+	$(GO) -C generator test -race -count=1 ./...
 	$(GO) -C conformance test -race -count=1 ./...
 
 fuzz:
@@ -32,4 +34,10 @@ verify:
 	$(PYTHON) tools/check_vectors.py
 	$(GO) run ./conformance/cmd/totipo-conformance -root . -verify-only
 
-check: spec-check test conformance verify
+architecture:
+	$(GO) run ./conformance/cmd/check-architecture -root .
+
+generate:
+	$(GO) run ./generator/cmd/generate-vectors -root .
+
+check: architecture spec-check test conformance verify
