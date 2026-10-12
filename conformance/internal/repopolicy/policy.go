@@ -240,8 +240,17 @@ func checkDependencyDir(root string, p pkg) error {
 		return fmt.Errorf("resolve dependency directory %s (%q): %w", p.ImportPath, p.Dir, err)
 	}
 	// A vendor package may not resolve into another source tree.
-	if within(filepath.Join(root, "vendor"), p.Dir) && !within(filepath.Join(root, "vendor"), resolved) {
-		return fmt.Errorf("vendor source symlink escape: %s", p.ImportPath)
+	if within(filepath.Join(root, "vendor"), p.Dir) {
+		// Compare canonical paths on both sides: temporary/repository ancestors
+		// may be aliases (for example /var -> /private/var on macOS). Resolve
+		// only the root so links out of vendor still fail the containment check.
+		resolvedRoot, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return fmt.Errorf("resolve repository root %q: %w", root, err)
+		}
+		if !within(filepath.Join(resolvedRoot, "vendor"), resolved) {
+			return fmt.Errorf("vendor source symlink escape: %s", p.ImportPath)
+		}
 	}
 	return nil
 }

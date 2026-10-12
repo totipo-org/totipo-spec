@@ -76,6 +76,33 @@ func TestDependencyDirVendor(t *testing.T) {
 	}
 }
 
+func TestDependencyDirVendorAliasedRoot(t *testing.T) {
+	r := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "repository")
+	if err := os.Symlink(r, alias); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink privilege unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	p := pkg{ImportPath: "golang.org/x/crypto/hkdf", Dir: filepath.Join(alias, "vendor", "golang.org", "x", "crypto", "hkdf")}
+	if err := os.MkdirAll(p.Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkDependencyDir(alias, p); err != nil {
+		t.Fatal(err)
+	}
+	// Resolving the root must not allow vendored sources to escape.
+	escape := filepath.Join(alias, "vendor", "escape")
+	if err := os.Symlink(t.TempDir(), escape); err != nil {
+		t.Fatal(err)
+	}
+	p.Dir = escape
+	if err := checkDependencyDir(alias, p); err == nil || !strings.Contains(err.Error(), "vendor source symlink escape") {
+		t.Fatalf("want vendor escape rejection through aliased root: %v", err)
+	}
+}
+
 func TestPolicyMutations(t *testing.T) {
 	for _, tt := range []struct{ name, path, body, want string }{
 		{"spec-command-semantic", "conformance/cmd/check-spec/a.go", "package main\nimport _ \"totipo/conformance/internal/vectors\"\n", "spec checker dependency"},
