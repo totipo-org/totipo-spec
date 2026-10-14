@@ -111,15 +111,22 @@ rules do not mandate host race-hardening primitives.
 
 ## Deliberate maintenance
 
-Normal checks never write cases. The explicit generator is:
+The committed corpus is authoritative input to verification. Normal checks never
+write cases. The explicit generator is:
 
 ```sh
-go run ./conformance/cmd/generate-vectors -root .
+go run ./generator/cmd/generate-vectors -root .
 ```
 
 It regenerates r19 fixtures and exact moving pins, preserves RFC TOTP files, and
 removes physical cases no longer in its declared corpus. Review its inputs and all
-before/after bytes. It uses the Go crypto primitives shared with the consumer;
-this is reproducibility evidence, not an independent cryptographic implementation.
-Use independent implementations before RC freeze. The existing Unicode bootstrap
+before/after bytes. Generator and consumer are separate Go modules with independent
+Totipo models and protocol-composition logic. Both use standard Go cryptographic
+primitives; this does not provide independent AES-GCM or Argon2 evidence. Use
+independent implementations before RC freeze. The existing Unicode bootstrap
 password is retained as an explicit source fixture.
+
+`go run ./conformance/cmd/totipo-conformance -root .` verifies artifacts before
+executing every case. Add `-verify-only` for artifact verification without
+semantic execution. Routine qualification is the human-owned `nix flake check`;
+generation requires deliberate authorization and is never part of qualification.

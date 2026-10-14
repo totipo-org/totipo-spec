@@ -4,7 +4,8 @@ The [manifest](manifest.json) lists the complete current corpus, with exact path
 SHA-256 hashes, kinds, expected outcomes, and specification sections. Every case
 is required by the [moving pre-RC profile](../requirements/v1-pre-rc.json).
 
-Run `make conformance` to execute all cases or `make verify` to validate schemas,
+Run `go run ./conformance/cmd/totipo-conformance -root .` from the repository root
+to verify artifacts and execute all cases. Add `-verify-only` to validate schemas,
 hashes, physical file coverage, and profile pins. Neither command writes fixtures.
 The [case contract](FORMAT.md) describes byte encoding and model boundaries.
 

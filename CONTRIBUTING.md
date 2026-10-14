@@ -33,18 +33,13 @@ macOS/Windows and Linux Go 1.23 jobs provide portability evidence. No additional
 `nix build` is required. Full Nix qualification checks are Linux-only; Darwin
 shells remain available for development.
 
-Follow the [interactive qualification ladder](AGENTS.md). Classify each milestone
-and record its execution counts. For ordinary semantic/conformance work, run
-`make check` once at baseline, use focused Go tests while editing, then
-run the final host suite once after inputs stabilize:
+Use the Nix development environment through the owner's direnv setup or
+`nix develop`. Follow [AGENTS.md](AGENTS.md) for baseline evidence, focused
+iteration, final host checks and execution accounting. Focused commands include:
 
 ```sh
-make check
-go -C generator vet ./...
-go -C conformance vet ./...
-make race
-make fuzz
-git diff --check
+go -C generator test -count=1 ./...
+go -C conformance test -count=1 ./...
 ```
 
 Preserve applicable formatting checks (`gofmt -l generator conformance`). Final race and
@@ -102,42 +97,40 @@ The sibling `totipo/generator` and `totipo/conformance` modules intentionally ow
 separate Totipo data models, protocol constants, and composition logic. Small
 duplicated formulas are independence evidence. No shared repository Totipo Go
 package or cross-role subprocess delegation is allowed. `go.work` is developer
-convenience, not isolation; `make architecture` checks source, metadata, and
-resolved test dependencies. Serialized artifacts on disk are the interface.
+convenience, not isolation. `go run ./conformance/cmd/check-architecture -root .`
+checks source, metadata, and resolved test dependencies. Serialized artifacts on
+disk are the interface.
 
-The same gate checks normal Make command wiring against an explicit reviewed
-allowlist: generation cannot become a prerequisite, recipe, or hidden Make
-expansion in verification. Executable Make changes require updating this policy
-and its negative tests; blank lines and ordinary Make comments are ignored.
-Continued comments and recipe comments require review because they can affect
-Make execution. This
-deliberately supports the current Makefile rather than interpreting arbitrary
-Make syntax. Caller-provided GO/GOCACHE and toolchain executables are trusted.
-The gate does not parse Nix or GitHub Actions; those entry points are reviewed
-to run the gate and the schema-aware verifier. `make check`, Linux
-`nix flake check`, and every portability job run the architecture checks and
-their negative tests. Generator unit tests in qualification check writer policy;
-they do not execute fixture generation. `make verify` and `make conformance`
-build only the consumer. CLI regressions hash all canonical artifact paths and
-bytes around successful and rejected verification in temporary artifact trees.
+Nix and GitHub Actions directly invoke Go commands. Review those entry points
+to preserve required qualification and keep generation separate. Architecture
+checks enforce semantic isolation; they do not validate orchestration text.
+Generator unit tests check writer policy without executing fixture generation.
+Full conformance and verify-only build only the consumer:
+
+```sh
+go run ./conformance/cmd/totipo-conformance -root .
+go run ./conformance/cmd/totipo-conformance -root . -verify-only
+```
+
+Full conformance includes artifact verification. CLI regressions hash canonical
+artifact paths and bytes around successful and rejected verification in temporary
+artifact trees.
 
 For standalone module qualification, use `GOWORK=off go -C generator test
 -mod=readonly -count=1 ./...` and the corresponding conformance command; vet
 each module with `GOWORK=off go -C <module> vet -mod=readonly ./...`.
 
-`make generate` is a deliberate maintenance operation that writes fixtures and
-pins. Normal Make, Nix, and CI checking never regenerates vectors. Qualify a
+`go run ./generator/cmd/generate-vectors -root .` is an explicitly authorized
+maintenance operation that writes fixtures and pins. Routine Nix and CI
+qualification never regenerates vectors. Qualify a
 writer change by copying spec/vectors/requirements to a temporary tree, retaining
 the RFC TOTP and bootstrap source known answers, running
 `go run ./generator/cmd/generate-vectors -root /path/to/temp-tree`, and comparing
 all output bytes and inventories before normal verification. Do not derive
 authored graph/storage expectations from verifier results.
 
-The older generator path in the unchanged `vectors/FORMAT.md` is superseded by
-`make generate` (or `go run ./generator/cmd/generate-vectors -root .`).
-
-Spec/prose policy now runs in Go via `make spec-check` (optional direct command:
-`go run ./conformance/cmd/check-spec -root .`). It requires only the active spec
+Spec/prose policy runs via `go run ./conformance/cmd/check-spec -root .`.
+It requires only the active spec
 and archived pre-r16 history. `vectors.Read` validates duplicate-safe JSON against
 both independently authored checked-in schemas before strict typed acceptance;
 required fields are checked by exact member presence rather than Go zero values.

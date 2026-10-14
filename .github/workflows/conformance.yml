@@ -41,10 +41,8 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache-dependency-path: conformance/go.sum
-      - name: Spec policy and schemas
-        run: |
-          go run ./conformance/cmd/check-spec -root .
-          go run ./conformance/cmd/totipo-conformance -root . -verify-only
+      - name: Spec policy
+        run: go run ./conformance/cmd/check-spec -root .
       - name: Formatting
         shell: bash
         run: test -z "$(gofmt -l generator conformance)"
@@ -67,5 +65,3 @@ jobs:
           GOWORK=off GOPROXY=off GOSUMDB=off go -C conformance test -mod=readonly -count=1 ./...
       - name: Manifest-driven conformance
         run: go run ./conformance/cmd/totipo-conformance -root .
-      - name: Manifest and profile integrity
-        run: go run ./conformance/cmd/totipo-conformance -root . -verify-only

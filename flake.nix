@@ -30,13 +30,12 @@
               (file: builtins.any file.hasExt [ "go" "s" "S" "c" "h" "cc" "syso" ]
                 || builtins.elem file.name [ "go.mod" "go.sum" ])
               ./.)
-            ./Makefile
             ./go.work
             ./review/V1_PRE_R16_REVISION_HISTORY.md
           ];
         };
         # Fixed supply-chain input, using nixpkgs' Go dependency derivation.
-        # Workspace vendoring preserves the root-level go run commands in Makefile.
+        # Workspace vendoring supports root-level go run commands for the consumer.
         goDependencies = (pkgs.buildGoModule {
           pname = "totipo-spec-dependencies";
           version = "r19";
@@ -53,7 +52,7 @@
           pname = "totipo-spec-qualification";
           version = "r19";
           src = qualificationSource;
-          nativeBuildInputs = with pkgs; [ go gnumake ];
+          nativeBuildInputs = with pkgs; [ go ];
           strictDeps = true;
           dontConfigure = true;
           buildPhase = ''
@@ -69,11 +68,18 @@
             cp -r ${goDependencies} vendor
             go version
             test -z "$(gofmt -l generator conformance)"
-            make check
+            go run ./conformance/cmd/check-architecture -root .
+            go run ./conformance/cmd/check-spec -root .
+            go -C generator test -count=1 ./...
+            go -C conformance test -count=1 ./...
+            go run ./conformance/cmd/totipo-conformance -root .
             go -C generator vet ./...
             go -C conformance vet ./...
-            make race
-            make fuzz
+            go -C generator test -race -count=1 ./...
+            go -C conformance test -race -count=1 ./...
+            go -C conformance test ./internal/object -run '^$' -fuzz FuzzDispatch -fuzztime 10s -parallel 2
+            go -C conformance test ./internal/cryptov1 -run '^$' -fuzz FuzzOpen -fuzztime 10s -parallel 2
+            go -C conformance test ./internal/graph -run '^$' -fuzz FuzzArrivalAndDisappearance -fuzztime 10s -parallel 2
             runHook postBuild
           '';
           installPhase = ''
@@ -92,7 +98,6 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             go
-            gnumake
             gopls
             golangci-lint
             golangci-lint-langserver
@@ -102,7 +107,6 @@
               fwdEnv = [ "GOPATH" "GOBIN" ];
               extraPkgs = with pkgs; [
                 go
-                gnumake
                 gopls
                 golangci-lint
                 golangci-lint-langserver
@@ -114,7 +118,6 @@
               fwdEnv = [ "GOPATH" "GOBIN" ];
               extraPkgs = with pkgs; [
                 go
-                gnumake
                 gopls
                 golangci-lint
                 golangci-lint-langserver

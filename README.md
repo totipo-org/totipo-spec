@@ -55,18 +55,13 @@ three bounded fuzz targets. Linux CI uses this authoritative gate. Supplemental
 macOS/Windows jobs and Linux Go 1.23 checks provide portability evidence.
 There is no application package or additional build command.
 
-Use `nix develop` or the existing direnv setup when available. Go 1.23+ is supported for direct local development. Follow the
-[interactive qualification ladder](AGENTS.md): one baseline `make check` for
-semantic/conformance work, focused checks while editing, then one complete host
-suite when inputs stabilize:
+The Nix flake provides the supported development environment, activated by the
+owner's direnv setup (or `nix develop`). Use ordinary Go commands for focused
+development inside that environment:
 
 ```sh
-make check
-go -C generator vet ./...
-go -C conformance vet ./...
-make race
-make fuzz
-git diff --check
+go -C generator test -count=1 ./...
+go -C conformance test -count=1 ./...
 ```
 
 Docs/process-only milestones use protected-byte invariance and applicable static
@@ -76,24 +71,32 @@ Record milestone classifications and execution counts in substantial reports.
 Optimization must come from staging expensive checks at boundaries,
 never from deleting final conformance/race/fuzz coverage.
 
-`make spec-check` runs the Go prose/history policy command, which reads only the
+See [AGENTS.md](AGENTS.md) for the final host checks and human-owned Nix gate.
+`go run ./conformance/cmd/check-spec -root .` runs prose/history policy, reading only the
 active spec and archived pre-r16 history. The verifier interprets the checked-in
 JSON schemas before typed decoding: required fields mean exact member presence,
 including false, zero, empty strings, and empty arrays. The schemas are independent
 contracts rather than generated Go models.
 
-Go is the implementation language for generator and verifier support tooling.
+Generator and verifier are separate Go modules with independent Totipo models
+and protocol-composition logic.
 The independent stdlib-only tests in `conformance/internal/wireoracle` read
 committed artifacts with their own duplicate-safe reader and check selected
 wire/key formulas without importing either implementation. The architecture
 guard enforces that restriction and the two-module generator/verifier boundary.
 No Totipo support-tooling command requires Python.
 
-`make conformance` executes every manifest case. `make verify` checks schemas,
-case hashes, physical case coverage, and exact requirements pins. Normal checks
-never regenerate fixtures. Explicit generator maintenance remains separate.
-Make defaults to a writable Go cache under `.direnv/` and honors caller-provided
-`GOCACHE`; Nix qualification uses temporary caches and fixed vendored Go inputs,
+Full conformance verifies artifacts and executes every manifest case:
+
+```sh
+go run ./conformance/cmd/totipo-conformance -root .
+```
+
+Add `-verify-only` to check schemas, hashes, physical coverage and requirements
+pins without semantic execution. The committed corpus is authoritative input.
+Normal checks never regenerate fixtures. Deliberate maintenance uses
+`go run ./generator/cmd/generate-vectors -root .` after authorization and review.
+Nix qualification uses temporary caches and fixed vendored Go inputs,
 with Go proxy and checksum-service access disabled. Darwin development shells remain available; full Nix
 qualification checks are Linux-only.
 See the [case contract](vectors/FORMAT.md) and [Go consumer](conformance/README.md).

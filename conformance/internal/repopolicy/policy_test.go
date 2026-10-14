@@ -29,7 +29,6 @@ func tree(t *testing.T) string {
 	put(t, r, "go.work", "go 1.23.0\nuse (\n./generator\n./conformance\n)\n")
 	put(t, r, "generator/a.go", "package generator\n")
 	put(t, r, "conformance/a.go", "package conformance\n")
-	put(t, r, "Makefile", reviewedMakefile)
 	return r
 }
 func TestPolicyAcceptsTwoModules(t *testing.T) {

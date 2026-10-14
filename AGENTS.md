@@ -1,17 +1,19 @@
-# Interactive qualification ladder
+# Nix-first interactive qualification
 
-Start each milestone on clean `main`; record the starting HEAD and protocol
-revision. Preserve historical reports. This ladder governs interactive agent work;
-it does not change the protocol, requirements, corpus, expected outcomes,
-generator semantics, conformance implementation, Make targets, or CI matrix.
-Remote CI remains authoritative supplemental portability evidence after commit/push.
+Start milestones on clean `main`, unless the user explicitly authorizes continuing
+identified uncommitted work. Record the starting HEAD, Git state, protocol revision,
+and inherited qualification status. Preserve historical reports. Work only within
+the authorized repository and scope.
 
-Optimization must come from staging expensive checks at boundaries,
-never from deleting final conformance/race/fuzz coverage.
+The repository's Nix flake is the supported development environment. The owner
+uses direnv; agents use ordinary Go commands in the activated environment. The
+human-owned authoritative routine qualification command is `nix flake check`.
+Agents do not execute Nix. Remote CI supplies supplemental portability evidence
+after an owner-authorized commit/push.
 
 ## Classify before qualifying
 
-Record all applicable classifications in each substantial report:
+Record every applicable classification in substantial reports:
 
 | Classification | Changed inputs |
 | --- | --- |
@@ -20,156 +22,126 @@ Record all applicable classifications in each substantial report:
 | `REQUIREMENTS` | Requirement profiles or pins |
 | `VECTOR_CORPUS` | Cases, schemas, manifest, or expected outcomes |
 | `CONFORMANCE_GO` | Go consumer or its tests |
-| `PYTHON_VERIFIER` | Python verification/structure logic or its tests |
+| `PYTHON_VERIFIER` | Historical Python verification/structure logic or tests |
 | `GENERATOR` | Fixture generator or its tests |
 | `BUILD_NIX_CI` | Build, dependency, Nix, source-filter, or CI inputs |
 
-Use multiple classifications for mixed milestones. An infrastructure-only
-milestone must establish source/byte invariance; changes to qualification logic
-still require the appropriate final qualification.
+Infrastructure-only work must establish protected source/byte invariance.
+Qualification-logic changes still require the applicable final checks.
 
-## Baseline once
+## Baseline and focused development
 
-For ordinary semantic/conformance work, run `make check` once at baseline.
-The committed starting revision carries previous qualification evidence; cite
-its actual status without upgrading pending evidence to a pass. Do not run race
-or fuzz at baseline by default. If the milestone directly changes race/fuzz-
-sensitive code, run the relevant focused target.
-
-## Focused inner loop
-
-Use the narrowest relevant command while editing, for example:
+Record baseline evidence before editing; do not upgrade pending evidence to a
+pass. For ordinary semantic/conformance work without a qualified baseline, run
+both module tests and full conformance once:
 
 ```sh
-go -C conformance test ./internal/schema
-go -C conformance test ./internal/graph
-go -C conformance test ./internal/cryptov1
+go -C generator test -count=1 ./...
+go -C conformance test -count=1 ./...
+go run ./conformance/cmd/totipo-conformance -root .
 ```
 
-For a specific conformance case, use the exact relevant manifest/test command
-supported by the consumer. For fuzz-target development, run only the affected
-bounded target using the existing Makefile flags. Do not repeatedly run
-`make check`, vet, race, all three fuzz targets, or Nix after minor edits.
+Do not run baseline race/fuzz by default. If changing race/fuzz-sensitive code,
+use the relevant focused command. While editing, use the narrowest Go package or
+test, for example:
 
-Generation and verification are separate. Never regenerate committed vectors
-and accept them merely because generation succeeds. Generator changes need
-applicable temporary generation/regenerate-and-compare evidence, review of
-intended differences, and final normal corpus verification. Successful generation
-cannot substitute for verification or justify changing expectations to pass.
+```sh
+go -C conformance test -count=1 ./internal/schema
+go -C conformance test -count=1 ./internal/graph
+go -C conformance test -count=1 ./internal/cryptov1
+```
 
-If `make check`, race, or fuzz fails, preserve the failure output and any
-reproduction input. Reproduce the specific Go package/test or fuzz
-target; fix narrowly and rerun that focused target. Return to the complete final
-suite after stabilization. Do not restart all three fuzz targets while diagnosing
-one deterministic test failure.
+Do not repeatedly run all-package tests, vet, race, all fuzz targets, or request
+Nix after minor edits. Preserve failure output and reproduction inputs; reproduce
+the specific package/test or bounded fuzz target, fix narrowly, then return to
+complete final qualification after stabilization.
 
 ## Final host boundary
 
-When spec/conformance inputs are stable, run the complete non-Nix suite once:
+For semantic, conformance, or qualification-logic changes, run the complete
+non-Nix suite once after included inputs stabilize:
 
 ```sh
-make check
+test -z "$(gofmt -l generator conformance)"
+go run ./conformance/cmd/check-architecture -root .
+go run ./conformance/cmd/check-spec -root .
+go -C generator test -count=1 ./...
+go -C conformance test -count=1 ./...
+go run ./conformance/cmd/totipo-conformance -root .
+go -C generator vet ./...
 go -C conformance vet ./...
-make race
-make fuzz
+go -C generator test -race -count=1 ./...
+go -C conformance test -race -count=1 ./...
+go -C conformance test ./internal/object -run '^$' -fuzz FuzzDispatch -fuzztime 10s -parallel 2
+go -C conformance test ./internal/cryptov1 -run '^$' -fuzz FuzzOpen -fuzztime 10s -parallel 2
+go -C conformance test ./internal/graph -run '^$' -fuzz FuzzArrivalAndDisappearance -fuzztime 10s -parallel 2
 git diff --check
 ```
 
-Keep any applicable formatting/structure checks required by changed inputs.
-Record the exact manifest case count, Python test execution count/results (zero
-after W3C), Go package results, vet result, race result, and each fuzz target's
-duration/result.
-Final race and fuzz remain mandatory for semantic/conformance code changes.
-Do not repeat this suite after report-only edits outside qualification inputs.
+Preserve all-package race coverage, fuzz seeds, failure semantics and these exact
+bounded fuzz settings. Optimization comes from staging expensive checks at
+boundaries, never deleting final coverage. Record case counts, package results,
+vet/race results, each fuzz duration/result, and Python test executions (currently
+zero). Report-only edits excluded from qualification do not require a repeat.
+Use writable Go caches; Nix qualification supplies temporary build/fuzz caches.
 
-The bounded fuzz policy remains exactly the Makefile policy: `FuzzDispatch`
-(`internal/object`), `FuzzOpen` (`internal/cryptov1`), and
-`FuzzArrivalAndDisappearance` (`internal/graph`), each with `-run '^$'`,
-`-fuzztime 10s`, and `-parallel 2`. Preserve seeds and failure semantics.
-`make race` retains all-package race coverage. The ladder changes when these
-checks run, never their coverage or meaning.
+## Generation and independent verification
 
-## Docs-only profile and byte invariance
-
-When `spec/`, `vectors/`, `requirements/`, `conformance/`, `tools/`, and `Makefile`
-are unchanged, use documentation/static checks required by the actual changed
-inputs and `git diff --check`. Do not automatically run race or 30+ seconds of
-fuzz because prose changed. A docs-only milestone does not need a baseline
-`make check` or the full host suite unless actual qualification dependencies
-consume the changed documents.
-
-For infrastructure/docs-only work, explicitly compare bytes against the starting
-revision for `spec/`, `vectors/`, `requirements/`, `conformance/`, relevant `tools/`,
-`go.work`, and every `go.mod`/`go.sum` (record absent root files). Include path
-additions/deletions in the comparison. Verify unchanged build/filter inputs when
-relying on existing Nix evidence. This is more useful than rerunning fuzz for
-pure prose edits.
-
-Inspect the actual source filter and structure-test dependencies before deciding
-whether docs invalidate qualification. Currently `flake.nix` includes spec,
-vectors, requirements, repository Go/native source and `go.mod`/`go.sum`, Makefile,
-go.work, and `review/V1_PRE_R16_REVISION_HISTORY.md` in `qualificationSource`.
-README, CONTRIBUTING, AGENTS, and other review reports are excluded and are not
-consumed by current structure checks. Reinspect this when inputs/filter change.
-
-## Invalidation matrix
-
-| Later change | Evidence invalidated / action |
-| --- | --- |
-| Spec, vectors, requirements, or conformance | Final full check/vet/race/fuzz suite; Nix when included in its source |
-| Go/Python tests or verification logic | Appropriate final suite, since qualification logic changed; Nix for included source |
-| Generator | Applicable generation comparison and final normal corpus verification; full host suite and Nix for included source |
-| Nix, vendorHash, lock, or flake-source inputs | Final Nix; affected host checks for changed qualification inputs |
-| Historical report excluded from qualification | No test/fuzz/Nix invalidation |
-| Review/history consumed by structure tests or source filter | Rerun affected qualification, including Nix if a flake-source input |
-| README/AGENTS/other process docs | Inspect actual filter and consumers; no guessed invalidation |
-
-## Nix last, human only
-
-The agent does not run Nix. The final routine pinned-environment gate is the
-human command:
+The generator and consumer remain separate Go modules with independent Totipo
+semantic implementations. Serialized artifacts are their interface. Routine
+qualification never invokes the generator. Explicitly authorized maintenance uses:
 
 ```sh
-nix flake check
+go run ./generator/cmd/generate-vectors -root .
 ```
 
-Local pre-commit Nix qualification uses the Git-aware working tree. Existing
-modified tracked files remain unstaged. For each new intended milestone file,
-the agent may run:
+Do not generate without deliberate authorization. Generator changes require
+applicable temporary generation/comparison, review of intended differences, and
+normal verification of the committed corpus. Successful generation is not proof
+of correctness and must never justify changing expectations to pass.
+Full conformance includes artifact verification. Verification without semantic
+execution remains available:
 
 ```sh
-git add --intent-to-add <file>
+go run ./conformance/cmd/totipo-conformance -root . -verify-only
 ```
 
-Intent-to-add establishes source membership only. The invariant is no staged
-file content: require `git diff --cached --quiet` to pass after intent-to-add
-and before the human gate. Staging actual file contents remains prohibited
-without explicit user authorization. Leave intent-to-add entries in place for
-human review and commit; do not reset them after qualification.
+## Documentation, source invariance and invalidation
 
-Ignored/local build, cache, and secret state must remain outside Git source
-membership. Use Git-aware current-checkout forms (`nix flake check`,
-`nix build .#<target>`, `nix run .#<app> -- ...`, and `nix develop`). Explicit
-`path:` sources remain allowed only when raw/non-Git path semantics are
-intentional, such as generated or exported source or a non-Git directory.
+For docs/process-only work, use applicable static checks and `git diff --check`;
+do not automatically rerun race/fuzz or the full suite. Inspect actual consumers
+and the flake filter before deciding whether documentation invalidates Nix.
+Compare bytes and path additions/deletions against the starting revision for
+spec, vectors, requirements, generator/conformance, relevant tools, go.work and
+all go.mod/go.sum files. Record absent root module/sum files.
 
-Request the human gate only after every intended new milestone file (including
-its report) is Git-known and all flake-source inputs are frozen: Go source,
-vectors/spec/requirements, Nix files/lock, deliberately included review/history,
-and qualification tooling. Any later edit to a flake-source input invalidates
-that result. Docs-only edits outside those inputs do not require a fresh request.
-An older pending gate remains pending, not passed. No `nix build` or artificial
-package materialization is required. Preserve Linux qualification and the
-existing supplemental portability matrix.
+The current qualificationSource includes spec, vectors, requirements, repository
+Go/native sources and go.mod/go.sum, go.work, and archived
+`review/V1_PRE_R16_REVISION_HISTORY.md`. Root README, CONTRIBUTING, AGENTS and
+other review reports are excluded and not consumed by structure checks.
+Reinspect dependencies whenever filter or consumers change.
 
-## Report execution counts
+Spec/artifact/semantic or verification-logic changes invalidate applicable final
+host qualification and Nix. Generator changes also need generation-comparison
+evidence. Nix/lock/vendorHash/filter changes require renewed human Nix and any
+affected host checks. Excluded report-only edits do not invalidate results.
 
-State baseline `make check` count, focused Python/Go test invocation counts,
-focused fuzz runs by target, final complete suite count (and any incomplete
-attempts), and human Nix count/status. Distinguish inherited evidence, agent
-execution, human execution, cached Nix results, and remote CI evidence.
+## Human gate and Git-aware source membership
 
-Clean semantic milestone target: baseline `make check`: 1; final
-`make check`/vet/race/fuzz: 1; human Nix: 1. Docs-only milestones may correctly
-record zero for all of these. Record exceptions and failures rather than hiding
-repeated attempts. Leave staging/committing to the user's requested workflow.
+Request the human `nix flake check` only after all intended milestone files are
+Git-known and included source inputs are frozen. Existing tracked changes remain
+unstaged. New intended files may use `git add --intent-to-add <file>` only;
+require `git diff --cached --quiet` to pass. Do not stage content without explicit
+authorization. Leave intent-to-add membership for owner review/commit.
+
+Keep local caches, secrets, generated output and build logs outside Git source
+membership. Use Git-aware current-checkout forms for human Nix commands; explicit
+`path:` sources are reserved for intentional raw/non-Git source semantics.
+No separate Nix build or package materialization is routinely needed.
+
+Any later included-source edit invalidates the human result; excluded report
+updates do not. Record pending gates accurately. Distinguish agent execution,
+human-reported execution, cached/fresh provenance and remote CI evidence.
+Record baseline/focused/final command counts, incomplete attempts, failures and
+human Nix count/status. Leave commits and release operations to the explicitly
+authorized user workflow.

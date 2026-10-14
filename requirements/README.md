@@ -4,8 +4,10 @@
 It pins the exact specification, entire manifest, manifest schema, case schema,
 and every manifest case ID/hash. There are no conditional capabilities.
 
-`make verify` checks schemas, exact physical case coverage, hashes, and profile
-membership. `make conformance` executes every case. Neither regenerates fixtures.
+`go run ./conformance/cmd/totipo-conformance -root . -verify-only` checks schemas,
+exact physical case coverage, hashes, and profile membership. Omit `-verify-only`
+for full conformance, which includes that verification and executes every case.
+Neither regenerates fixtures; the committed corpus is authoritative input.
 Explicit maintenance is described in [FORMAT.md](../vectors/FORMAT.md).
 
 Do not freeze an RC profile until independent implementation interoperability and

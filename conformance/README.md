@@ -1,7 +1,17 @@
 # Go v1/r19 reference/conformance consumer
 
 This Go 1.23+ module is the repository's reference consumer, not a production client.
-Run `make check`, `make race`, and `make fuzz` from the repository root. The CLI
+The supported environment is the Nix flake, activated through direnv or
+`nix develop`. The owner runs `nix flake check` for authoritative qualification;
+agents use direct Go commands for focused development. From the repository root:
+
+```sh
+go -C generator test -count=1 ./...
+go -C conformance test -count=1 ./...
+go run ./conformance/cmd/totipo-conformance -root .
+```
+
+The CLI
 accepts `-root /path/to/repository` and `-verify-only`. Every manifest case is
 required; there is no optional capability selection. These cases provide core
 protocol and modeled store-operation evidence under the specification’s Section 20
@@ -10,8 +20,12 @@ crash durability.
 
 Read-only integrity belongs to `vectors.Read` and `vectors.VerifyProfile`: exact
 revision, raw artifact/case hashes, physical corpus coverage, and the exact
-manifest/profile required set. `make spec-check` checks prose structure/history;
-`make verify` runs schema-aware Go artifact and integrity verification.
+manifest/profile required set. `go run ./conformance/cmd/check-spec -root .`
+checks prose structure/history. The command
+`go run ./conformance/cmd/totipo-conformance -root . -verify-only`
+runs schema-aware Go artifact and integrity verification without
+semantic execution. Full conformance includes that verification; the committed
+corpus is authoritative input.
 The schemas remain the presence/type contract, including required false and zero
 values; Go strict decoding and `ValidateShape` protect direct consumer inputs.
 Verification never updates pins or derives expected outcomes from evaluation.
@@ -41,15 +55,15 @@ wrong types are not followed or traversed. Backend booleans describe trusted API
 persistence, staging behavior, host syscall races, or remote completeness. A live
 adapter must implement the specification's durability and truthful reporting rules.
 
-Tests never regenerate fixtures. For an intentional reviewed protocol update:
+Tests never regenerate fixtures. For explicitly authorized fixture maintenance:
 
 ```sh
-make generate
-make verify
-make conformance
+go run ./generator/cmd/generate-vectors -root .
+go run ./conformance/cmd/totipo-conformance -root .
 ```
 
-The sibling generator module independently constructs deterministic TOKEN bytes using public test roots and
+The separate generator Go module owns independent Totipo models and composition
+logic. It constructs deterministic TOKEN bytes using public test roots and
 preserves the independent RFC TOTP answers. Semantic graph/workflow expectations
 are specified explicitly, not queried from the evaluator. Review the diff and
 pins; independent interoperability remains necessary before RC freeze.
