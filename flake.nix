@@ -114,17 +114,6 @@
                 gcc
               ];
             })
-            (jailed-agents.lib.${system}.makeJailedPi {
-              fwdEnv = [ "GOPATH" "GOBIN" ];
-              extraPkgs = with pkgs; [
-                go
-                gopls
-                golangci-lint
-                golangci-lint-langserver
-                libgcc
-                gcc
-              ];
-            })
           ];
         };
       });
