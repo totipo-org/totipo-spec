@@ -1,112 +1,48 @@
 # Totipo
 
-Totipo is an encrypted, append-only TOTP vault format operating on a configured
-durable store. Synchronization is optional and external.
+Totipo is an encrypted, append-only vault format for time-based one-time password
+(TOTP) credentials. It defines how clients store and interpret credential changes
+in a configured durable store, preserving concurrent disagreements as conflicts.
+The same format supports local-only and externally synchronized stores;
+synchronization is optional and outside the protocol.
 
-The current normative specification is **v1/r19**, a design draft with moving
-pre-release-candidate conformance evidence:
-[Totipo Vault Format v1](spec/totipo-vault-format-v1.md).
+The authoritative current specification is **[Totipo Vault Format v1,
+revision r19](spec/totipo-vault-format-v1.md)**. It is a **design draft** with a
+moving pre-release-candidate requirements profile, not a frozen release or RC.
 
-The design uses complete-state TOKEN assertions, fixed 1024-byte encrypted objects,
-keyed content addressing, a maximum of four explicit parents, and whole-state
-conflicts. Cycles form causal-equivalence groups. Optional CLIENT_NAME and CLIENT_TIME
-are informational and preserved exactly while each object is represented and
-across all stages of one fold, without requiring persistent remembered history. Tombstones retain the full credential. Applications describe
-observed state truthfully; known complete credentials remain available for TOTP
-computation regardless of lifecycle or historical status.
+The trust boundary matters: Totipo authenticates and validates observed content,
+but does not prove that a store presents complete or fresh history. Store loss,
+withheld objects, or rollback can hide history; stronger freshness, rollback
+detection, and retention guarantees require storage or application mechanisms.
+An unlocked vault root grants authoring authority, and a compromised unlocked
+client can read secrets and author valid state. The bootstrap permits offline
+password guessing; deletion does not securely erase credentials from history.
+See specification [Section 2](spec/totipo-vault-format-v1.md#2-threat-model-and-storage-boundary),
+[Section 5](spec/totipo-vault-format-v1.md#5-password-bytes), and
+[Section 16](spec/totipo-vault-format-v1.md#16-complete-values-and-truthful-descriptions)
+for the limitations and applicable requirements.
 
-A store contains canonical regular-file `vault` and directory `objects-v1/`. Only exact v1 TOKENs
-contribute semantic state. Unknown sibling families are outside v1 interpretation;
-future families define their own compatibility relationships. The vault root
-provides authoring authority. VAULT_ID (SHA-256 of exact VAULT bytes) provides optional stable recognition.
-VAULT is an immutable create-once bootstrap; object history is immutable. Credential,
-KDF-policy, or root changes require migration to a fresh independent vault.
-No per-client persistent graph database is required. Store loss or rollback can
-lose history. Totipo validates and authenticates observed content, but does not
-cryptographically guarantee a complete or freshest store view. Stronger freshness,
-rollback detection, or history retention must be explicitly supplied by the
-storage environment or application; synchronization remains optional.
-
-| Path | Role |
+| Entry point | Role |
 | --- | --- |
-| `spec/` | Current normative protocol |
-| `vectors/` | Exact byte, negative, graph, fold, and storage workflow cases |
-| `requirements/` | Moving pre-RC pins |
-| `conformance/` | Go reference consumer and architecture guard |
-| `generator/` | Independent deliberate fixture writer |
-| `review/` | Historical decisions and review evidence |
+| [Specification](spec/totipo-vault-format-v1.md) | Normative protocol and conformance scopes |
+| [Requirements](requirements/README.md) | Moving pre-RC profile pinning the spec, schemas, manifest, and required cases |
+| [Vectors](vectors/README.md) and [case contract](vectors/FORMAT.md) | Committed byte, negative, graph, fold, and modeled storage cases |
+| [Verifier / Go consumer](conformance/README.md) | Read-only artifact verification and semantic execution; conformance evidence rather than a production client |
+| [Generator maintenance](CONTRIBUTING.md#fixture-maintenance-and-implementation-independence) | Deliberate fixture writing in the independent [generator module](generator/); never part of routine verification |
+| [Review archive](review/) | Historical decisions, reviews, and qualification evidence; commands and results belong to their recorded revisions |
 
-The final routine repository qualification gate uses the pinned Nix environment
-after its source inputs are frozen (human execution; agents do not run Nix):
+A new implementer can start with the specification's goals and trust model
+(Sections 1–2), then identify the intended conformance scopes and operations in
+[Section 20](spec/totipo-vault-format-v1.md#20-conformance-scopes-and-evidence).
+Read the applicable normative sections alongside the vector overview and case
+contract, and use the requirements profile to identify the exact current inputs.
+The Go consumer documents how to verify those artifacts and execute every manifest
+case. Passing the portable corpus does not establish application conformance,
+independent interoperability, or a live backend's crash durability.
 
-```sh
-nix flake check
-```
-
-This uses the Git-aware working tree: tracked modifications may remain unstaged;
-new intended milestone files must first be Git-known via intent-to-add. See the
-[contributor policy](CONTRIBUTING.md) for the no-staged-content invariant and
-intentional raw/non-Git path exceptions. Keep local caches and secrets outside
-Git source membership.
-
-On Linux this runs formatting, structural/schema and integrity checks, independent Go
-wire-oracle tests, all Go tests and manifest conformance cases, vet, race tests, and the
-three bounded fuzz targets. Linux CI uses this authoritative gate. Supplemental
-macOS/Windows jobs and Linux Go 1.23 checks provide portability evidence.
-There is no application package or additional build command.
-
-The Nix flake provides the supported development environment, activated by the
-owner's direnv setup (or `nix develop`). Use ordinary Go commands for focused
-development inside that environment:
-
-```sh
-go -C generator test -count=1 ./...
-go -C conformance test -count=1 ./...
-```
-
-Docs/process-only milestones use protected-byte invariance and applicable static
-checks rather than automatic race/fuzz runs. Inspect the flake source filter and
-structure dependencies before deciding whether a docs edit requires human Nix.
-Record milestone classifications and execution counts in substantial reports.
-Optimization must come from staging expensive checks at boundaries,
-never from deleting final conformance/race/fuzz coverage.
-
-See [AGENTS.md](AGENTS.md) for the final host checks and human-owned Nix gate.
-`go run ./conformance/cmd/check-spec -root .` runs prose/history policy, reading only the
-active spec and archived pre-r16 history. The verifier interprets the checked-in
-JSON schemas before typed decoding: required fields mean exact member presence,
-including false, zero, empty strings, and empty arrays. The schemas are independent
-contracts rather than generated Go models.
-
-Generator and verifier are separate Go modules with independent Totipo models
-and protocol-composition logic.
-The independent stdlib-only tests in `conformance/internal/wireoracle` read
-committed artifacts with their own duplicate-safe reader and check selected
-wire/key formulas without importing either implementation. The architecture
-guard enforces that restriction and the two-module generator/verifier boundary.
-No Totipo support-tooling command requires Python.
-
-Full conformance verifies artifacts and executes every manifest case:
-
-```sh
-go run ./conformance/cmd/totipo-conformance -root .
-```
-
-Add `-verify-only` to check schemas, hashes, physical coverage and requirements
-pins without semantic execution. The committed corpus is authoritative input.
-Normal checks never regenerate fixtures. Deliberate maintenance uses
-`go run ./generator/cmd/generate-vectors -root .` after authorization and review.
-Nix qualification uses temporary caches and fixed vendored Go inputs,
-with Go proxy and checksum-service access disabled. Darwin development shells remain available; full Nix
-qualification checks are Linux-only.
-See the [case contract](vectors/FORMAT.md) and [Go consumer](conformance/README.md).
-
-The [r19 immutable-VAULT report](review/V1_R19_IMMUTABLE_VAULT_REPORT.md) records
-the create-only model, unchanged wire bytes, and adjusted conformance.
-The [r18 hardening report](review/V1_R18_HARDENING_REPORT.md) records application
-safety, conformance scopes, editorial cleanup, and the unchanged portable corpus.
-The [r17 clarification report](review/V1_R17_HARDENING_REPORT.md) records the
-threat-model clarification and unchanged 90-case corpus.
-The [r16 rewrite report](review/V1_R16_REWRITE_REPORT.md) records the baseline,
-five checkpoint hashes, per-case migration, and validation. Older reports remain
-historical evidence. No release candidate is frozen by this rewrite.
+[CONTRIBUTING.md](CONTRIBUTING.md) documents contribution review, the supported
+Nix/Go environment, qualification, and deliberate fixture maintenance.
+Its [qualification policy](CONTRIBUTING.md#qualification-policy) defines the
+human-owned `nix flake check` gate and the documentation-only validation path.
+[AGENTS.md](AGENTS.md) directs agents to that same policy.
+Report suspected vulnerabilities through [SECURITY.md](SECURITY.md).
